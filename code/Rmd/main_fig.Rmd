@@ -130,21 +130,25 @@ tab1_df %>%
 
 Y-axis indicates the log (base 10) of the relative antibody units (RAU) with limits at 10^-2 and 10-5. X-axis is in days and is square-root transformed. Each colored line indicates individual trajectories over time. The solid lines are Loess smooth functions. Rug plots show measurements from confirmed cases and uninfected household contacts classified within a 180-day infection window (black) and outside a 180-day infection window (purple).
 
-```{r spaghetti-netmfi,  eval=TRUE, fig.height = 7, fig.width = 10}
+```{r f1-spaghetti-rau,  eval=TRUE, fig.height = 7, fig.width = 10}
 
-
+#data for figure 1
 fig1_df <- final_df %>% 
         filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","O139 OSP","CT-B","TcpA")) %>%
         mutate(antigen_pretty=factor(antigen_pretty,levels=c("Ogawa OSP","Inaba OSP","O139 OSP","CT-B","TcpA"))) %>%
-        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
+        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
+        filter(study_code!="R1")
 
 
+
+#case true positives
 true_pos <- fig1_df %>% filter(
                    status=="Case",
                    day > 2,
                    day<200
                    )
 
+#case true negatives
 true_neg <- fig1_df %>%
                 filter(cohort=="SMIC/PIC") %>%
                 anti_join(true_pos)
@@ -154,7 +158,6 @@ true_neg <- fig1_df %>%
 
 fig1_df %>%
         filter(status=="Vaccinee")  %>%
-        filter(study_code!="R1") %>%
         mutate(Vaccinee=case_when(
                 cohort == "BGD Vaccinee" & age<10 ~ "Bangladeshi <10 years",
                 cohort == "BGD Vaccinee" & age>=10 ~  "Bangladeshi 10+ years",
@@ -188,6 +191,17 @@ fig1_df %>%
 
 
 ### Figure 2: Misclassification of vaccinated individuals
+
+```{r f2-misclassify}
+
+#run misclassification
+
+
+
+```
+
+
+
 
 
 ```{r misclassify, eval=FALSE,fig.height = 8, fig.width = 8}
