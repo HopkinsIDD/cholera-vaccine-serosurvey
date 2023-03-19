@@ -13,7 +13,9 @@ output:
 
 library(knitr)
 
-knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,fig.height = 7,
+knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,
+                      cache = TRUE,
+                      fig.height = 7,
                       fig.width = 10, eval=FALSE,
                       dev="pdf" )
 
@@ -115,7 +117,9 @@ tab1_df %>%
         flextable::flextable() %>%
         flextable::autofit() %>%
         flextable::padding(i=2:5, j=1, padding.left=20) %>%
-        flextable::align(align = "center",j=2:4,part="all")
+        flextable::align(align = "center",j=2:4,part="all") %>%
+        flextable::width(width = 1.5) 
+
 
 ```
 
