@@ -1,0 +1,1387 @@
+---
+title: 'Supplemental Material: Strategy for serosurveys in partially vaccinated populations'
+date: "`r Sys.Date()`"
+output:
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message =FALSE, eval = FALSE,fig.height = 7,
+                      fig.width = 10
+                      )
+```
+
+```{r libraries, eval = TRUE}
+library(tidyverse)
+library(readxl)
+library(rdrop2)
+
+library(randomForest)
+library(party)
+library(permimp)
+library(cvAUC)
+
+library(cowplot)
+library(captioner)
+library(corrplot)
+library(scales)
+
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+library(tidybayes)
+# library(readstata13)
+
+source("source/final_code/shared/utils.R")
+source("source/final_code/shared/utils_vax.R")
+source("source/final_code/shared/utils_recon.R")
+
+
+
+```
+
+
+
+```{r data, eval=TRUE}
+
+source("source/final_code/vax_strategy/R/load-data.R")
+
+
+```
+
+
+\pagebreak
+
+## Supplementary Methods
+
+```{r captions1,  eval=TRUE}
+vars <- list()
+
+eqn_nums <- captioner(prefix = "Method 4-S.", auto_space = FALSE)
+
+
+# eqn_nums(name = "sample-selection", caption = "Overview of sample selection", display = FALSE)
+# eqn_nums(name = "univariate-decay", caption = "Univariate decay models", display = FALSE)
+# eqn_nums(name = "random-forest", caption = "Random Forest Classification", display = FALSE)
+eqn_nums(name = "bayes-framework-questionairre", caption = "Equations for Bayesian framework to estimate seroincidence using questionairre data", display = FALSE)
+
+eqn_nums(name = "bayes-framework-serology", caption = "Equations for Bayesian framework to estimate seroincidence using additional serological data", display = FALSE)
+
+
+```
+
+### `r eqn_nums("bayes-framework-questionairre")`
+
+#### Questionairre adjustment
+
+We sought to estimate seroincidence (i.e. $\lambda$) and vaccination coverage (i.e. $\gamma$) in the context of a simulated serosurvey occurring shortly after a vaccination campaign using serological and questionairre data.
+Questionairre adjustment assumes we already know the vaccination status ($V_i$) of individuals (indexed by $i$), equaling either  1 (vaccinated) or 0 (unvaccinated).
+$S_i$ is the serostatus as determined by a classification model prediction from serological data.
+It can equal either  1 (seropositive) or 0 (seronegative). 
+$R_i$ is the true infection status, equaling either 1 (recently infected) or 0 (not recently infected).
+We used estimates of sensitivity and specificity for $Pr(S_i|V_i,R_i)$, including the estimated uncertainty in each parameter when only 3 IgG markers are measured.
+We assumed that the sensitivity of detecting recent infection was the same regardless of vaccination status (i.e. $Pr(S_i|V_i=1,R_i=1)=Pr(S_i|V_i=0,R_i=1)$). Here is the likelihood function used in the framework:
+
+
+\[
+\begin{aligned}
+        Pr(\vec S, \vec V| \lambda, \gamma) \approx & \prod_{i=1}^n Pr(S_i, V_i| \lambda, \gamma)\\
+        = & \prod_{i=1}^n \sum_{r=0}^1 Pr(S_i, V_i| R_i=r,\lambda, \gamma) \times Pr(R_i=r|\lambda,\gamma)\\
+        = & \prod_{i=1}^n \sum_{r=0}^1 Pr(S_i|V_i, R_i=r,\lambda, \gamma)\times Pr(V_i | R_i=r,\lambda, \gamma) \times Pr(R_i=r|\lambda,\gamma)\\
+        = & \prod_{i=1}^n \sum_{r=0}^1 Pr(S_i|V_i, R_i=r)\times Pr(V_i | \gamma) \times Pr(R_i=r|\lambda)\\
+        = & \prod_{i=1}^n Pr(S_i|V_i, R_i=0)\times Pr(V_i | \gamma) \times Pr(R_i=0|\lambda)\\
+        & + Pr(S_i|V_i, R_i=1)\times Pr(V_i | \gamma) \times Pr(R_i=1|\lambda)\\
+        = & \prod_{i=1}^n Pr(S_i|V_i, R_i=0)\times Pr(V_i | \gamma) \times (1-\lambda)\\
+        & + Pr(S_i|V_i, R_i=1)\times Pr(V_i | \gamma) \times \lambda\\
+\end{aligned}
+\]
+
+#### Ignoring vaccination status
+
+For the ignoring vaccination status "method", we modified the equations for the questionairre adjustment by simply setting all individuals to be considered unvaccinated. 
+Without any information about vaccination status, we do not estimate vaccination coverage, $\gamma$. We used estimates of sensitivity and specificity for $Pr(S_i|V_i=0,R_i)$, including the estimated uncertainty in each parameter when only 3 IgG markers are measured. Here is the likelihood function used in the framework:
+
+\[
+\begin{aligned}
+        Pr(\vec S| \lambda) \approx 
+         & \prod_{i=1}^n Pr(S_i|V_i=0, R_i=0)\times (1-\lambda)\\
+        & + Pr(S_i|V_i=0, R_i=1) \times \lambda\\
+\end{aligned}
+\]
+
+\pagebreak
+
+### `r eqn_nums("bayes-framework-serology")`
+
+We sought to estimate seroincidence (i.e. $\lambda$) and vaccination coverage (i.e. $\gamma$).
+$S_i$ is the serostatus as determined by a classification model using serological data from 15 markers.
+It can equal either  3 (seropositive, recently infected), 2 (seropositive, recently vaccinated but not recently infected), and 1 (seronegative).
+$R_i$ is the true infection status, equaling either 1 (recently infected) or 0 (not recently infected).
+$V_i$ is the true vaccination status, equaling either 1 (recently vaccinated) or 0 (not recently vaccinated).
+We used estimates of sensitivity and specificity for $Pr(S_i|V_i,R_i)$, including the estimated uncertainty in each parameter when only 15 serological markers are measured.
+We assumed that the sensitivity of detecting recent infection was the same regardless of vaccination status (i.e. $Pr(S_i|V_i=1,R_i=1)=Pr(S_i|V_i=0,R_i=1)$). Here is the likelihood used in the framework:
+
+\[
+\begin{aligned}
+        Pr(\vec S| \lambda, \gamma)  \approx& \prod_{i=1}^n Pr(S_i| \lambda,\gamma)\\
+                =& \prod_{i=1}^n \sum_{r=0}^1 \sum_{v=0}^1 Pr(S_i|R_i=r,V_i=v,\lambda,\gamma) \times Pr(R_i=r,V_i=v|  \lambda,\gamma) \\
+                =& \prod_{i=1}^n \sum_{r=0}^1 \sum_{v=0}^1 Pr(S_i|R_i=r,V_i=v) \times Pr(R_i=r,V_i=v|  \lambda,\gamma) \\
+                =& \prod_{i=1}^n \sum_{r=0}^1 \sum_{v=0}^1 Pr(S_i|R_i=r,V_i=v) \times Pr(R_i=r|V_i=v,  \lambda,\gamma)\times Pr(V_i=v|  \lambda,\gamma) \\
+                 =& \prod_{i=1}^n \sum_{r=0}^1 \sum_{v=0}^1 Pr(S_i|R_i=r,V_i=v) \times Pr(R_i=r|  \lambda)\times Pr(V_i=v| \gamma) \\
+                 =& \prod_{i=1}^n Pr(S_i|R_i=1,V_i=1) \times Pr(R_i=1|  \lambda)\times Pr(V_i=1| \gamma) \\
+        & + Pr(S_i|R_i=1,V_i=0) \times Pr(R_i=1|  \lambda)\times Pr(V_i=0| \gamma) \\
+        & + Pr(S_i|R_i=0,V_i=1) \times Pr(R_i=0|  \lambda)\times Pr(V_i=1| \gamma) \\
+        & + Pr(S_i|R_i=0,V_i=0) \times Pr(R_i=0|  \lambda)\times Pr(V_i=0| \gamma) \\
+                =& \prod_{i=1}^n Pr(S_i|R_i=1,V_i=1) \times \lambda \gamma \\ 
+        &+ Pr(S_i|R_i=1,V_i=0) \times \lambda (1-\gamma) \\
+        &+ Pr(S_i|R_i=0,V_i=1) \times (1-\lambda) \gamma \\
+        &+  Pr(S_i|R_i=0,V_i=0) \times (1-\lambda) (1-\gamma) \\
+        & \text{Assume } S_i|R_i=1 \text{ does not depend } V_i \\
+                 =& \prod_{i=1}^n Pr(S_i|R_i=1) \times \lambda \\ 
+        &+ Pr(S_i|R_i=0,V_i=1) \times (1-\lambda) \gamma \\
+        &+  Pr(S_i|R_i=0,V_i=0) \times (1-\lambda) (1-\gamma) \\
+\end{aligned}
+\]
+
+
+\pagebreak
+
+## Supplementary Figures and Tables
+
+```{r captions2,  eval=TRUE}
+vars <- list()
+
+tab_nums <- captioner(prefix = "Table 4-S.", auto_space = FALSE)
+fig_nums <- captioner(prefix = "Figure 4-S.", auto_space = FALSE)
+
+fig_nums(name = "vax-timing", caption = "Timing of sample collection among Haitian vaccinees relative to date of first dose vaccination", display = FALSE)
+
+fig_nums(name = "baseline-comparison", caption = "Comparison of baseline antibody measurements among Haitian vaccinees and Bangladeshi cholera cases", display = FALSE)
+
+fig_nums(name = "spaghetti-netmfi-supp", caption = "Multiplex bead assay net median fluorescence intensity measurements of IgG, IgM, and IgA against other antigens among Haitian vaccinated volunteers", display = FALSE)
+
+fig_nums(name = "prop-peak", caption = "Proportion of individuals with a peak value on a given day, by age group and antibody", display = FALSE)
+
+fig_nums(name = "kinetics-HPD-1", caption = "Posterior density of half-life and average fold-change from exponential kinetic models for anti-OSP, anti-CT-B, and anti-TcpA antibodies among vaccinees and cases", display = FALSE)
+
+fig_nums(name = "kinetics-HPD-2", caption = "Posterior density of half-life and average fold-change from exponential kinetic models for additional antibody measurements among vaccinees and cases", display = FALSE)
+
+tab_nums(name = "kinetics-table", caption = "Estimated duration of half-life and average fold-change from exponential kinetic models for vaccinees and cases", display = FALSE)
+
+tab_nums(name = "crude-fpr", caption = "Number of samples from vaccinated individuals misclassified as recently infected by infection window", display = FALSE)
+
+tab_nums(name = "simulation-table", caption = "Average and range of seroincidence estimates in simulated serological surveys", display = FALSE)
+
+fig_nums(name = "coverage-plot", caption = "Coverage estimates in simulated serological surveys", display = FALSE)
+
+tab_nums(name = "coverage-table", caption = "Average and range of coverage estimates in simulated serological surveys", display = FALSE)
+
+
+```
+
+\pagebreak
+
+### `r fig_nums("vax-timing")`
+
+Each point represents a blood sample collection occurred for a vaccinated volunteer (A). The daily number of samples is shown on the y-axis (B). Red-dashed line indicates timing of second dose at 14 days.
+
+
+```{r vax-timing, eval=TRUE, fig.height = 12}
+
+timing_df <- distinct(analysisData$netMFI_data$long_data,
+                      id, day, day_actual,age_group,status) %>%
+                filter(status=="Vaccinee") %>%
+                mutate(age_group2=ifelse(age_group=="18+ years",
+                                         "18+ years","<18 years"
+                                         ))
+
+
+p_dot_plot <- timing_df %>%
+                ggplot(aes(x=day_actual,y=id))+
+                geom_point()+
+                geom_line()+
+                facet_grid(age_group2~.,space = "free",scales = "free")+
+                scale_x_continuous("Days post first dose vaccination", breaks = c(90,180,365*c(0,1,2,3)))+
+                geom_vline(xintercept = c(14),col="red",lty=2)+
+                theme_cowplot()+
+                ylab("Participant ID")
+
+p_sample_curve <- timing_df %>%
+                group_by(status, day_actual, day) %>% count() %>%
+                ggplot(aes(x=day_actual,y=n))+
+                geom_col()+
+                scale_y_continuous("Samples", breaks=seq(0,50,10))+
+                scale_x_continuous("Days post first dose vaccination", breaks = c(30,90,180,365))+
+                geom_vline(xintercept = c(14),col="red",lty=2)+
+                theme_cowplot()+
+                theme(legend.position = "none")
+
+
+plot_grid(p_dot_plot,p_sample_curve,ncol = 1,align="v",rel_heights = c(3,1),axis="lr",
+          labels=c("A","B")
+          )
+
+
+```
+
+\pagebreak
+
+### `r fig_nums("baseline-comparison")`
+
+Baseline antibody measurements from cases (2-4 days after infection) and vaccinees (day of first dose) are shown on the y-axis (A). Ratios of the geometric mean MFI are shown on the y-axis with 95% bootstrapped confidence intervals indicated by vertical lines (B).
+
+```{r baseline-comparison, eval=TRUE}
+
+
+
+# pvalue_df <- analysisData$netMFI_data$long_data %>% 
+#         filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
+#         filter(test_type=="Luminex") %>%
+#         filter(antigen %in% c("CtxB","OgawaOSPBSA","InabaOSPBSA","O139BSA")) %>%
+#         mutate(`Age Group`=ifelse(age>=18,"Adults","Children")) %>%
+#         mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+#         group_by(isotype,antigen,`Age Group`) %>%
+#         summarize(pvalue=getMannWhitney(value,status) )  %>%
+#         filter(pvalue<0.05) %>%
+#         left_join(antigen_df)%>%
+#         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
+
+raw_baseline_plot <- analysisData$netMFI_data$long_data %>%
+        filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
+        filter(test_type=="Luminex") %>%
+        filter(antigen %in% c("CtxB","OgawaOSPBSA","InabaOSPBSA","O139BSA")) %>%
+        left_join(antigen_df)%>%
+        mutate(`Age Group`=ifelse(age>=18,"Adults","Children")) %>%
+        mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))%>%
+        ggplot(aes(y=value,fill=status,col=status,x=`Age Group`))+
+        # geom_boxplot(fill=NA)+
+        geom_dotplot(binaxis = "y", stackdir = "center",
+                     position="dodge",
+                     binwidth = 0.1
+                     )+
+        # geom_text(data=pvalue_df,label="*",y=4,aes(x=`Age Group`),
+        #           inherit.aes = FALSE,  size = 8
+        #           )+
+        ylab("Baseline log10(Net MFI)") +
+        facet_grid(isotype~antigen_pretty)+
+        theme_bw()+
+        theme(legend.position="bottom")
+                
+
+bootDF <- read_rds("source/final_code/vax_strategy/generated_rds/bootDF.rds")
+
+
+
+GMT_ratio_plot <- bootDF %>% 
+        group_by(isotype,antigen,`Age Group`) %>%
+        summarize(mean=mean(mfi_ratio),
+                  lb=quantile(mfi_ratio,0.025),
+                  ub=quantile(mfi_ratio,0.975)) %>%
+        mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+        left_join(antigen_df) %>%
+        ggplot(aes(x=`Age Group`, col=isotype,y=mean))+
+                geom_point(position = position_dodge(0.5))+
+                geom_linerange(aes(ymin=lb,ymax=ub),
+                               position = position_dodge(0.5))+
+        facet_wrap(.~antigen_pretty,nrow=1)+
+        geom_hline(yintercept=1,lty=2)+
+        theme_bw()+
+        scale_y_continuous("Geometric Mean\nMFI Ratio", trans="log2")+
+        xlab("Age Group")+
+        theme(
+              legend.position = "bottom"
+              )+
+        scale_color_brewer("Isotype",palette = "Dark2")
+
+
+plot_grid(raw_baseline_plot,
+          GMT_ratio_plot,
+          rel_heights = c(2,1),
+          ncol=1,
+          align = "v",
+          axis="lr",
+          labels=c("A","B")
+          )
+
+
+
+
+```
+
+\pagebreak
+
+### `r fig_nums("spaghetti-netmfi-supp")`
+
+Y-axis indicates the log (base 10) of the Net MFI. X-axis is square-root transformed. Each colored line indicates individual trajectories over time (dark blue: children, gold: adults). Rug plots show the antibody measurements from the cohort in Bangladesh (red: Case measurements inside the 120-day infection window; black: Uninfected household contacts and case measurements outside a 120-day infection window). The black dotted line indicates the timing of second dose vaccination.
+
+```{r spaghetti-netmfi-supp, eval=TRUE}
+
+included_antigens <- c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")
+
+
+vax_long_NetMFI %>% filter(status =="Vaccinee") %>% 
+                filter(test_type=="Luminex") %>%
+                filter(!antigen_pretty  %in% included_antigens)%>%
+                mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
+                mutate(`Age Group`=ifelse(age<18,"<18 years","18+ years")) %>%
+                ggplot(aes(x=day_actual,y=value,col=`Age Group`))+
+                        geom_vline(xintercept=14,lty=3)+
+                        geom_line(aes(group=id),alpha=0.4)+
+                        facet_grid(isotype~antigen_pretty)+
+                        geom_rug(data=casecon_analysisMFI %>% filter(status =="Case") %>%
+                                filter(day_actual>5 & day_actual<=120) %>%
+                                filter(test_type=="Luminex") %>%
+                                filter(!antigen_pretty  %in% included_antigens),
+                                aes(y=value),sides="l",alpha=0.2,col="red")+
+                        geom_rug(data=casecon_analysisMFI %>%
+                                filter((!(day_actual>5 & day_actual<=120))|status=="Contact") %>%
+                                filter(test_type=="Luminex") %>%
+                                filter(!antigen_pretty  %in% included_antigens),
+                                aes(y=value),sides="r",alpha=0.2,col="black")+
+                        ylab("log10(Net MFI)")+
+        scale_x_continuous("Days Post First Dose", trans="mysqrt",
+                                           breaks=c(0,14,120,365),
+                                           limits = c(0,400))+
+                        scale_color_manual("Age Group",values=c("#003262","#FDB515"))+
+                        theme_cowplot()+
+                        theme(legend.position = "bottom")
+                        
+
+```
+
+\pagebreak
+
+### `r fig_nums("prop-peak")`
+Color indicates the proportion of cases(A) and vaccinees (B) whose peak value fall on around a certain day since infection or first dose vaccination. Proportions are stratified by age group and antibody.
+
+
+```{r prop-peak, eval=TRUE}
+
+prop_df <- analysisData$netMFI_data$long_data %>%
+                left_join(antigen_df) %>%
+                filter(test_type=="Luminex") %>%
+                filter(status %in% c("Case","Vaccinee")) %>%
+                filter(antigen_pretty  %in% c("CT-B","Ogawa OSP","Inaba OSP"))%>%
+                mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
+                mutate(`Age Group`=ifelse(age<18,"<18 years","18+ years")) %>%
+                group_by(isotype,antigen_pretty,`Age Group`,status,id) %>%
+                summarize(peak_day=min(day[value==max(value)])) %>% 
+                mutate(peak_day_group=ifelse(peak_day>=180,
+                                             "180+",as.character(peak_day))) %>%
+                group_by(isotype,antigen_pretty,`Age Group`,status,peak_day_group) %>%
+                count() %>%
+                group_by(isotype,antigen_pretty,`Age Group`,status)%>%
+                mutate(proportion=n/sum(n)) %>%
+                ungroup()
+
+
+case_plot<- prop_df %>%filter(status=="Case") %>%
+        distinct(isotype,antigen_pretty,`Age Group`,status) %>%
+        expand_grid(prop_df %>%
+                            filter(status=="Case") %>%
+                            distinct(peak_day_group)) %>%
+        left_join(prop_df %>% filter(status=="Case")) %>%
+        mutate(proportion=ifelse(is.na(proportion),0,proportion)) %>% 
+        mutate(`Peak Day`=factor(peak_day_group,
+                                     levels=c("2","7","30","90","180+"))) %>%
+        ggplot(aes(y=`Age Group`,x=`Peak Day`))+
+                geom_tile(aes(fill=proportion))+
+                facet_grid(isotype~antigen_pretty)+
+                scale_fill_viridis_c("Proportion of Individuals",limits=c(0,max(prop_df$proportion)))+
+                xlab("Days post infection")
+
+vaxplot <- prop_df %>%filter(status=="Vaccinee") %>%
+        distinct(isotype,antigen_pretty,`Age Group`,status) %>%
+        expand_grid(prop_df %>%
+                            filter(status=="Vaccinee") %>%
+                            distinct(peak_day_group)) %>%
+        left_join(prop_df %>% filter(status=="Vaccinee")) %>%
+        mutate(proportion=ifelse(is.na(proportion),0,proportion)) %>% 
+        mutate(`Peak Day`=factor(peak_day_group,
+                                     levels=c("0","7","21","44","90","180+"))) %>%
+        ggplot(aes(y=`Age Group`,x=`Peak Day`))+
+                geom_tile(aes(fill=proportion))+
+                facet_grid(isotype~antigen_pretty)+
+                scale_fill_viridis_c("Proportion of Individuals",limits=c(0,max(prop_df$proportion)))+
+                xlab("Days post first dose")
+
+plot_grid(case_plot+ theme_bw()+
+                  theme(legend.position = "right"),
+          vaxplot+theme_bw()+
+                  theme(legend.position = "none"),ncol=1,
+          labels=c("A","B")
+          )
+
+```
+
+
+\pagebreak
+
+### `r fig_nums("kinetics-HPD-1")`
+
+Points represent 1000 draws from the posterior distribution for the average individual (red: children, pink: adults) and vaccinees (light blue: adults) and solid lines highlighting a contour containing the top 95% of all estimates. Estimates of the average fold change for child vaccines are shown as a rug plot (dark blue) with solid lines indicating the 95% credible interval. 
+
+
+```{r kinetics-HPD-1, eval=TRUE}
+
+# fit_list <- read_rds("source/final_code/vax_strategy/generated_rds/exponential_fits/fit_list_netMFI.rds")
+fit_df_1000 <- read_rds("source/final_code/vax_strategy/generated_rds/exponential_fits/fit_df_1000_netMFI.rds")
+
+
+#get plot together
+exp_plot_df <- fit_df_1000 %>% 
+        mutate(antigen=str_remove(full_test,"Luminex_Ig[G|A|M]_")) %>%
+        mutate(isotype=str_extract(full_test,"Ig[G|A|M]")) %>%
+        left_join(antigen_df, by="antigen") %>%
+        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) 
+
+
+# HPD graph
+exp_plot_df %>% 
+                filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
+        mutate(antigen_pretty=factor(antigen_pretty,
+                                     levels=c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA"))) %>%
+        filter(status!="Child Vaccinee") %>%
+        ggplot(aes(x=halflife,y=foldchange,col=status)) +
+        geom_point(alpha=0.01)+
+        stat_hpd_2d(fill=NA,n=100)+
+        theme_bw()+
+        geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee") %>%
+                  filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")),
+                 sides="l",alpha=0.01
+                 )+
+        geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee")%>%
+                  filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
+                        group_by(antigen_pretty,isotype) %>%
+                 summarize(lb=quantile(foldchange,0.025),
+                           ub=quantile(foldchange,0.975)
+                           ) %>%
+                         gather(bound,foldchange,-c(isotype,antigen_pretty)) %>%
+                         mutate(halflife=2,
+                                status="Child Vaccinee"
+                                ),
+                 sides="l"
+        )+
+        facet_grid(isotype~antigen_pretty)+
+        scale_color_manual("Individual",
+                           values=RColorBrewer::brewer.pal(12,"Paired")[c(5,1,6,2)]#[c(3,9,4,10)]
+                           )+
+
+
+        scale_y_continuous("Average fold-change",trans="log2",
+                           breaks = c(1,4,16,64,256,1024),limits=c(1,1024)
+        )+
+        scale_x_continuous("Half-life (days)", trans="log2",
+                           breaks=c(7,30,180,720),limits=c(1,3000)
+        )+
+        geom_hline(yintercept=1,lty=2,col="grey")+
+        theme(panel.grid.minor = element_blank(),
+              legend.position = "right"
+        )
+
+```
+
+\pagebreak
+
+
+### `r fig_nums("kinetics-HPD-2")`
+
+Points represent 1000 draws from the posterior distribution for the average individual (red: children, pink: adults) and vaccinees (light blue: adults) and solid lines highlighting a contour containing the top 95% of all estimates. Estimates of the average fold change for child vaccines are shown as a rug plot (dark blue) with solid lines indicating the 95% credible interval. 
+
+
+```{r kinetics-HPD-2, eval=TRUE}
+
+exp_plot_df %>% 
+                filter(!antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
+        filter(status!="Child Vaccinee") %>%
+        ggplot(aes(x=halflife,y=foldchange,col=status)) +
+        geom_point(alpha=0.01)+
+        stat_hpd_2d(fill=NA,n=100)+
+        theme_bw()+
+        geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee") %>%
+                  filter(!antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")),
+                 sides="l",alpha=0.01
+                 )+
+        geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee")%>%
+                  filter(!antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
+                        group_by(antigen_pretty,isotype) %>%
+                 summarize(lb=quantile(foldchange,0.025),
+                           ub=quantile(foldchange,0.975)
+                           ) %>%
+                         gather(bound,foldchange,-c(isotype,antigen_pretty)) %>%
+                         mutate(halflife=2,
+                                status="Child Vaccinee"
+                                ),
+                 sides="l"
+        )+
+        facet_grid(isotype~antigen_pretty)+
+        scale_color_manual("Individual",
+                           values=RColorBrewer::brewer.pal(12,"Paired")[c(5,1,6,2)]#[c(3,9,4,10)]
+                           )+
+
+
+        scale_y_continuous("Average fold-change",trans="log2",
+                           breaks = c(1,4,16,64,256,1024),limits=c(1,1024)
+        )+
+        scale_x_continuous("Half-life (days)", trans="log2",
+                           breaks=c(7,30,180,720),limits=c(1,3000)
+        )+
+        geom_hline(yintercept=1,lty=2,col="grey")+
+        theme(panel.grid.minor = element_blank(),
+              legend.position = "right"
+        )
+
+
+```
+
+
+\pagebreak
+
+### `r tab_nums("kinetics-table")`
+
+The median estimate duration of half-life (in days) and the median estimate increase in fold-change for the average individual are shown below. 95% Bayesian Credible Intervals are shown in parentheses.
+
+```{r kinetics-table, eval=TRUE}
+
+exp_plot_df %>% select(.draw,antigen_pretty,isotype,status, foldchange, halflife) %>%
+        gather(parameter,value, -c(antigen_pretty,isotype,status,.draw)) %>%
+                group_by(antigen_pretty,isotype,status,parameter) %>%
+                summarize(
+                        med = median(value),
+                        lb = quantile(value,0.025),
+                        ub = quantile(value,0.975)
+                ) %>%
+        mutate(tab_cell=ifelse(parameter=="foldchange",
+                        paste0(round(med,1)," (",round(lb,1),"-",round(ub,1),")"),                      
+                        paste0(round(med,0)," (",round(lb,0),"-",round(ub,0),")")                            
+                               )) %>%
+        select(`Isotype`=isotype,
+               `Antigen`=antigen_pretty,
+               `Status`=status,parameter,tab_cell) %>%
+        spread(parameter,tab_cell) %>%
+        rename(`Half Life (95% CI) in days`=halflife,
+                                 `Average Fold-Change (95% CI)`=foldchange) %>%
+                    flextable::flextable() %>%
+                    flextable::merge_v(j="Isotype") %>%
+                    flextable::valign(j="Isotype",valign = "top") %>%
+                    flextable::merge_v(j="Antigen") %>%
+                    flextable::valign(j="Antigen",valign = "top") %>%
+                    flextable::fontsize(size = 9,part="all") %>%
+                    flextable::autofit()
+
+
+
+```
+
+\pagebreak
+
+
+
+### `r tab_nums("crude-fpr")`
+
+
+```{r crude-fpr, eval=TRUE}
+
+raw_df <- read_rds(
+          paste0("source/final_code/vax_strategy/generated_rds/fpr-estimates/","raw_df.rds")
+)
+
+
+filter(raw_df,variables=="Reduced Panel IgG") %>% 
+        mutate(`Age Group`=ifelse(age<18,"<18 years","18+ years")) %>%
+        group_by(end_window,day,`Age Group`) %>%
+        summarize(seropos=sum(spec95_seropos),
+                  n=n(),
+                  rate=seropos/n
+                  ) %>%
+        ungroup() %>%
+        mutate(text=paste0(scales::percent(rate,1)," (",seropos,"/",n,")")) %>%
+        mutate(end_window=factor(end_window,levels=c("45","120","200","300"))) %>%
+        mutate(end_window=factor(end_window,labels=paste0(levels(end_window),
+                                                         "-day model"
+                                                         ))) %>%
+        select(end_window,`Age Group`,`Days after first dose`=day,text) %>%
+        spread(end_window,text) %>%
+        flextable::flextable() %>%
+        flextable::merge_v("Age Group") %>%
+        flextable::valign(j="Age Group",valign="top") %>%
+        flextable::autofit()
+
+
+```
+
+
+\pagebreak
+
+
+### `r tab_nums("simulation-table")`
+
+
+```{r simulation-table, eval=TRUE}
+sim_df <- read_rds("source/final_code/vax_strategy/generated_rds/simulations/new_sim_df.rds")%>%
+        mutate(`True Coverage`=scales::percent(coverage,1)) %>%
+        mutate(`Days since second dose`=factor(as.numeric(day)-14)) %>%
+        mutate(pretty_coverage=paste(`True Coverage`,"Coverage"))
+
+
+averages <- sim_df %>% group_by(`Days since second dose`,`True Coverage`,method) %>% 
+        summarize(avg_lambda=mean(lambda),
+                  min_lambda=min(lambda),
+                  max_lambda=max(lambda),
+                  
+                  avg_gamma=mean(gamma),
+                  min_gamma=min(gamma),
+                  max_gamma=max(gamma)
+                  ) %>%
+        gather(parameter,value,-c(`Days since second dose`,
+                                  `True Coverage`,method)) %>%
+        mutate(value=round(100*value,1)) %>%
+        mutate(value=sprintf("%.1f", value)) %>%
+        spread(parameter,value)
+
+
+averages %>%
+        mutate(pretty_estimate= glue::glue("{avg_lambda}% ({min_lambda}%-{max_lambda}%)")
+                       ) %>%
+        select(`True Coverage`,`Days since second dose`,method,pretty_estimate) %>%
+        spread(method,pretty_estimate) %>%
+        flextable::flextable() %>%
+        flextable::merge_v("True Coverage") %>%
+        flextable::valign(j="True Coverage",valign="top") %>%
+        flextable::autofit()
+
+
+
+
+```
+
+\pagebreak
+
+### `r fig_nums("coverage-plot")`
+
+```{r coverage-plot, eval=TRUE}
+
+sim_df %>% 
+        filter(method!="Ignore")%>%
+        ggplot(aes(y=gamma,col=method,x=`Days since second dose`,
+                      group=paste0(day,method,simulation))) +
+        geom_point(position=position_dodge(width = 0.5))+
+        geom_linerange(aes(ymin=gamma.lower,ymax=gamma.upper),position=position_dodge(width = 0.5),
+                       alpha=0.3
+        )+
+        geom_hline(data=distinct(sim_df,coverage,pretty_coverage),
+                           aes(yintercept=coverage),lty=2)+
+        scale_color_brewer("Adjustment Method",palette="Dark2")+
+        scale_y_continuous("Vaccination Coverage",limits=c(0,1))+
+        facet_wrap(.~pretty_coverage)+
+        theme_bw()+
+        theme(legend.position = "bottom",
+               panel.grid.minor=element_blank(),
+                        panel.grid.major.x=element_blank()
+              )
+
+```
+
+
+\pagebreak
+
+### `r tab_nums("coverage-table")`
+
+```{r coverage-table, eval=TRUE}
+
+averages %>%
+        filter(method!="Ignore")%>%
+        mutate(pretty_estimate= glue::glue("{avg_gamma}% ({min_gamma}%-{max_gamma}%)")
+                       ) %>%
+        select(`True Coverage`,`Days since second dose`,method,pretty_estimate) %>%
+        spread(method,pretty_estimate) %>%
+        flextable::flextable() %>%
+        flextable::merge_v("True Coverage") %>%
+        flextable::valign(j="True Coverage",valign="top") %>%
+        flextable::autofit()
+
+```
+
+
+
+```{r vax-boxplot, eval=FALSE}
+### Comparison of vaccinee timing with those inside and outside 120-day window
+
+adult120 <- wide_analysisMFI %>% 
+        addInfectionWindow(120) %>%
+        filter(age>=18) %>%
+        select(sample,status,inf_120,
+               matches("Ogawa|CtxB")
+               )  %>%
+        select(sample,status,inf_120,
+               matches("Luminex")
+               )  %>%
+        gather(full_test,value,-c(sample,inf_120,status)) %>%
+        mutate(isotype=str_extract(full_test,"Ig[A|M|G]")) %>% 
+        mutate(`Infected in\nlast 120 days`=factor(inf_120,
+                                                  levels = c(1,0),
+                                                  labels=c("Yes","No")))%>%
+        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
+
+
+adultvax <- vax_long_NetMFI %>% 
+        filter(str_detect(full_test,"Ogawa|CtxB")) %>%
+        filter(str_detect(full_test,"Luminex")) %>%
+        filter(age>=18) %>%
+        select(sample,value,full_test,status,day)%>%
+        mutate(isotype=str_extract(full_test,"Ig[A|M|G]")) %>%
+        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
+
+
+vax_pvalue_df <- data.frame()
+
+for(d in unique(adultvax$day)[unique(adultvax$day)>0]){
+
+        tmp_df <- adultvax %>%
+                    filter(day %in% c(0,d)) %>%
+        group_by(full_test) %>%
+        summarize(pvalue=getMannWhitney(value,day)) %>%
+        mutate(pvalue=round(pvalue,3))
+
+        vax_pvalue_df <- bind_rows(vax_pvalue_df,
+                               tmp_df %>% mutate(day=d)
+                               )
+
+}
+
+vax_pvalue_df <- vax_pvalue_df %>%
+        mutate(isotype=str_extract(full_test,"Ig[A|M|G]")) %>%
+        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
+        
+
+p1 <- adult120 %>%
+        filter(str_detect(full_test,"Ogawa")) %>%
+        ggplot(aes(x=`Infected in\nlast 120 days`,col=`Infected in\nlast 120 days`))+
+                geom_boxplot(aes(y=value))+
+                scale_y_continuous("log10(Net MFI)",limits=c(1,5.5))+
+                facet_wrap(.~isotype,ncol=1)+
+                theme_bw()+
+                theme(legend.position = "none")+
+                scale_color_manual(values=c("red","black"))
+
+
+p2 <- adultvax %>%
+        filter(str_detect(full_test,"Ogawa")) %>%
+        ggplot(aes(x=factor(day)))+
+                geom_boxplot(aes(y=value),col="#FDB515")+
+                scale_y_continuous("log10(Net MFI)",limits=c(1,5.5))+
+                xlab("Days since first dose")+
+                facet_wrap(.~isotype,ncol=1)+
+                theme_bw()+
+                theme(legend.position = "none")+
+                geom_text(data=vax_pvalue_df %>%
+                        filter(str_detect(full_test,"Ogawa")) %>%
+                        filter(pvalue<0.01),
+                        label="*",y=4,col="black",
+                        size = 8
+                          )
+
+
+p3 <- adult120 %>%
+        filter(str_detect(full_test,"CtxB")) %>%
+        ggplot(aes(x=`Infected in\nlast 120 days`,col=`Infected in\nlast 120 days`))+
+                geom_boxplot(aes(y=value))+
+                scale_y_continuous("log10(Net MFI)",limits=c(1,5.5))+
+                facet_wrap(.~isotype,ncol=1)+
+                theme_bw()+
+                theme(legend.position = "none")+
+                scale_color_manual(values=c("red","black"))
+
+
+
+p4 <- adultvax %>%
+        filter(str_detect(full_test,"CtxB")) %>%
+        ggplot(aes(x=factor(day)))+
+                geom_boxplot(aes(y=value),col="#FDB515")+
+                scale_y_continuous("log10(Net MFI)",limits=c(1,5.5))+
+                xlab("Days since first dose")+
+                facet_wrap(.~isotype,ncol=1)+
+                theme_bw()+
+                theme(legend.position = "none")+
+                geom_text(data=vax_pvalue_df %>%
+                        filter(str_detect(full_test,"CtxB")) %>%
+                        filter(pvalue<0.01),
+                        label="*",y=4,col="black",
+                        size = 8
+                          )
+
+plot_grid(p1,p2,p3,p4,align="h",rel_widths = c(1,3),
+          labels=c("A","B","C","D")
+          )
+
+
+
+
+
+# bind_rows(adult120_Ogawa %>%
+#                   filter(inf_120==0)
+#           ,
+#           adultvax_Ogawa %>%
+#                   filter(day==44)
+#           ) %>% 
+#         mutate(new_status= (status=="Vaccinee")) %>%
+#         group_by(full_test) %>%
+#         summarize(pvalue=getMannWhitney(value,new_status))
+
+
+
+# %>%
+#         ggplot(aes(x=full_test,col=factor(day)))+
+#                 geom_boxplot(aes(y=value),position = position_dodge(1))
+
+```
+
+
+
+```{r eval=FALSE}
+
+caret_data <- read_rds("source/final_code/vax_strategy/generated_rds/vax-classification/caret_data.rds")
+fit_list <- read_rds("source/final_code/vax_strategy/generated_rds/vax-classification/fit_list.rds")
+loss_list <- read_rds("source/final_code/vax_strategy/generated_rds/vax-classification/loss_list.rds")
+
+bind_rows(loss_list,.id="model")  %>%
+        mutate(model=factor(model,levels=model)) %>%
+        mutate(antigen=str_remove(lose,"Luminex_Ig[G|A|M]_")) %>%
+        mutate(isotype=str_extract(lose,"Ig[G|A|M]")) %>%
+        left_join(antigen_df,by='antigen') %>%
+        mutate(pretty_test = glue::glue("anti-{antigen_pretty} {isotype}")) %>%
+        mutate(model_name=ifelse(model %in% c("21 markers","2 markers"),
+                                 as.character(model),
+                                 paste0("+",pretty_test)
+                                 )) %>%
+        mutate(model_name=ifelse(model_name=="2 markers",
+                                 "anti-CT-B IgG + anti-TcpA IgG",
+                                 model_name
+                                 )) %>%
+        mutate(model_name=factor(model,labels=model_name)) %>%
+        ggplot(aes(x=model_name,y=logLoss))+
+        theme_bw()+
+        geom_col()+
+        coord_flip()
+
+
+isotype_fit_list <- read_rds("source/final_code/vax_strategy/generated_rds/vax-classification/isotype_fit_list.rds")
+
+
+ lapply(isotype_fit_list, FUN=function(x){
+        x$fit$results %>% filter(logLoss==min(logLoss))
+}
+) %>% bind_rows(.id="model") %>%
+        mutate(model=factor(model,levels=model)) %>%
+        ggplot(aes(x=model,y=logLoss))+
+        theme_bw()+
+        geom_col()+
+        coord_flip()
+ 
+ 
+antigen_fit_list <- read_rds("source/final_code/vax_strategy/generated_rds/vax-classification/antigen_fit_list.rds")
+
+lapply(antigen_fit_list, FUN=function(x){
+        x$fit$results %>% filter(logLoss==min(logLoss))
+}
+) %>% bind_rows(.id="model") %>%
+        mutate(model=factor(model,levels=model)) %>%
+        ggplot(aes(x=model,y=logLoss))+
+        theme_bw()+
+        geom_col()+
+        coord_flip()
+ 
+
+
+
+# proportion_df <- caret_data %>% 
+#         mutate(rowIndex=1:n()) %>%
+#         left_join(fit_list$`model 2`$pred) %>%
+#         right_join(filter(loss_list,model=="model 2"),
+#                    by=c("mtry", "min.node.size", "splitrule")) #
+# 
+# 
+# 
+# # supplemental figures
+# proportion_df  %>%
+#         select(sample,choice=pred,obs, Neither, RecentlyInfected,RecentlyVaccinated) %>%
+#         gather(pred,proportion,-c(sample,choice,obs)) %>%
+#         group_by(sample) %>%
+#         filter(proportion==max(proportion)) %>%
+#         ggplot(aes(x=proportion))+
+#         geom_histogram(aes(fill=choice))+
+#         facet_wrap(.~obs)
+# 
+# 
+# proportion_df  %>%
+#         select(sample,choice=pred,obs, Neither, RecentlyInfected,RecentlyVaccinated) %>%
+# 
+#         gather(pred,proportion,-c(sample,choice,obs)) %>%
+#         group_by(sample) %>%
+#         filter(proportion==max(proportion)) %>%
+#         group_by(obs) %>%
+#         summarize(n(),
+#                   mean(proportion<0.5))
+# 
+# proportion_df  %>%
+#         select(sample,choice=pred,obs, Neither, RecentlyInfected,RecentlyVaccinated) %>%
+#         gather(pred,proportion,-c(sample,choice,obs)) %>%
+#         ggplot(aes(x=sample,y=proportion,fill=pred))+
+#         geom_col()+
+#         facet_grid(.~obs,scales="free",space="free")
+
+```
+
+
+
+
+```{r pca-analyses, eval=FALSE}
+marker21 <-  multi_class_data %>% distinct(full_test) %>%
+        filter(!str_detect(full_test,"LTB|LTh|CTHT|Flu"))
+
+marker12 <- marker21 %>% distinct(full_test) %>%
+        filter(!str_detect(full_test,"VCC|Sialidase|O139"))
+
+marker6 <- marker12 %>% 
+        filter(str_detect(full_test,"Ig[G|A]_CtxB|Ig[G|M]_Ogawa|IgG_TcpA"))
+
+
+pca_data <- multi_class_data %>%
+        select(sample,id,vaxinf_class,isotype,antigen_pretty,full_test,value,day,age,status) %>% 
+        select(-isotype,-antigen_pretty) %>%
+        spread(full_test,value)
+
+pca21 <-  select(pca_data,matches(marker21 %>% unlist() %>% paste0(collapse = "|"))) %>%
+        prcomp(center = TRUE,scale. = TRUE)
+
+
+pca12 <- select(pca_data,matches(marker12 %>% unlist() %>% paste0(collapse = "|"))) %>%
+        prcomp(center = TRUE,scale. = TRUE)
+
+pca6 <- select(pca_data,matches(marker6 %>% unlist() %>% paste0(collapse = "|"))) %>%
+        prcomp(center = TRUE,scale. = TRUE)
+
+
+prop_var_df <- bind_rows(
+        data.frame(
+                n_markers=6,
+                prop =(pca6$sdev^2) /sum((pca6$sdev^2)))%>%
+                mutate(component = paste0("PC",1:n())),
+        data.frame(
+                n_markers=12,
+                prop =(pca12$sdev^2) /sum((pca12$sdev^2)))%>%
+                mutate(component = paste0("PC",1:n())),
+        data.frame(
+                n_markers=21,
+                prop =(pca21$sdev^2) /sum((pca21$sdev^2)))%>%
+                mutate(component = paste0("PC",1:n()))
+)
+
+pca_pred_df <-bind_rows(
+        predict(pca21) %>% as.data.frame() %>%
+           bind_cols(pca_data) %>%
+           mutate(n_markers=21),
+        predict(pca12) %>% as.data.frame() %>%
+           bind_cols(pca_data)%>%
+           mutate(n_markers=12),
+        predict(pca6) %>% as.data.frame() %>%
+           bind_cols(pca_data)%>%
+           mutate(n_markers=6),
+        ) %>%
+        mutate(Class= case_when(
+                               vaxinf_class=="Recently Vaccinated" ~ glue::glue("{vaxinf_class} ({day} days)"),
+                               vaxinf_class=="Recently Infected" & day <= 120 ~ glue::glue("{vaxinf_class} (<=120 days)"),
+                               # vaxinf_class=="Recently Infected" & day > 120 & day <= 200 ~ glue::glue("{vaxinf_class} (121-200 days)"),
+                               vaxinf_class=="Neither" ~ "Neither")
+                       ) %>%
+        mutate(Class = factor(Class,
+                                  levels=c(
+                                          "Recently Infected (<=120 days)",
+                                          # "Recently Infected (121-200 days)",
+                                          "Recently Vaccinated (7 days)",
+                                          "Recently Vaccinated (21 days)",
+                                          "Recently Vaccinated (44 days)",
+                                          "Neither" )))
+
+plot21 <- pca_pred_df %>%
+        filter(n_markers==21) %>%
+        ggplot(aes(x=PC1,y=PC2,col=Class,shape=Class))+
+        geom_point()+
+        # scale_color_manual(values=c("red","red","darkblue","darkblue","darkblue","grey50"))+
+        # scale_shape_manual(values=c(1,2,1,2,3,1))+
+        scale_color_manual(values=c("red","darkblue","darkblue","darkblue","grey50"))+
+        scale_shape_manual(values=c(1,1,2,3,1))+
+
+        theme_cowplot()+
+        xlab(paste0("PC1 (",
+                    filter(prop_var_df,component=="PC1") %>%
+                    filter(n_markers==21) %>%
+                    pull(prop) %>% scales::percent(),")"))+
+        ylab(paste0("PC2 (",
+                    filter(prop_var_df,component=="PC2") %>%
+                    filter(n_markers==21) %>%
+                    pull(prop) %>% scales::percent(),")"))
+
+
+plot12 <- pca_pred_df %>%
+        filter(n_markers==12) %>%
+        ggplot(aes(x=PC1,y=PC2,col=Class,shape=Class))+
+        geom_point()+
+        # scale_color_manual(values=c("red","red","darkblue","darkblue","darkblue","grey50"))+
+        # scale_shape_manual(values=c(1,2,1,2,3,1))+
+        scale_color_manual(values=c("red","darkblue","darkblue","darkblue","grey50"))+
+        scale_shape_manual(values=c(1,1,2,3,1))+
+        theme_cowplot()+
+        xlab(paste0("PC1 (",
+                    filter(prop_var_df,component=="PC1") %>%
+                    filter(n_markers==12) %>%
+                    pull(prop) %>% scales::percent(),")"))+
+        ylab(paste0("PC2 (",
+                    filter(prop_var_df,component=="PC2") %>%
+                    filter(n_markers==12) %>%
+                    pull(prop) %>% scales::percent(),")"))
+
+plot6 <- pca_pred_df %>%
+        filter(n_markers==6) %>%
+        ggplot(aes(x=PC1,y=PC2,col=Class,shape=Class))+
+        geom_point()+
+        # scale_color_manual(values=c("red","red","darkblue","darkblue","darkblue","grey50"))+
+        # scale_shape_manual(values=c(1,2,1,2,3,1))+
+        scale_color_manual(values=c("red","darkblue","darkblue","darkblue","grey50"))+
+        scale_shape_manual(values=c(1,1,2,3,1))+
+        theme_cowplot()+
+        xlab(paste0("PC1 (",
+                    filter(prop_var_df,component=="PC1") %>%
+                    filter(n_markers==6) %>%
+                    pull(prop) %>% scales::percent(),")"))+
+        ylab(paste0("PC2 (",
+                    filter(prop_var_df,component=="PC2") %>%
+                    filter(n_markers==6) %>%
+                    pull(prop) %>% scales::percent(),")"))
+
+
+
+
+plot_grid(
+        plot21+theme(legend.position = "none")+
+                ggtitle("21 markers"),
+        plot12+theme(legend.position = "none")+
+                ggtitle("12 markers"),
+        plot6+theme(legend.position = "none")+
+                ggtitle("6 markers"),
+        ggpubr::get_legend(plot6)
+)
+
+
+
+```
+
+```{r}
+
+
+raw_df %>% 
+        filter(age<18) %>%
+        group_by(variables,end_window,day) %>%
+        summarize(#n=n(),
+                  `90% Specificity`=mean(spec90_seropos),
+                  `95% Specificity`=mean(spec95_seropos),
+                  `99% Specificity`=mean(spec99_seropos)
+                  ) %>%
+        gather(specificity,seropos,-c(variables,end_window,day))%>%
+        ggplot(aes(y=variables,x=seropos,fill=factor(day)))+
+                geom_col(position = "dodge")+
+        facet_grid(specificity~as.numeric(end_window))+
+        scale_x_continuous("Proportion Seropositive",breaks = seq(0.1,0.7,0.1))+
+        scale_fill_viridis_d(direction=-1)+
+        theme_bw()+
+        theme(panel.grid.minor = element_blank())+
+        ylab("MBA markers")
+
+
+
+```
+
+
+```{r}
+
+#crude FPR among adult vaccinees
+
+raw_df %>% 
+        filter(age>=18) %>%
+        group_by(variables,end_window,day) %>%
+        summarize(#n=n(),
+                  `90% Specificity`=mean(spec90_seropos),
+                  `95% Specificity`=mean(spec95_seropos),
+                  `99% Specificity`=mean(spec99_seropos)
+                  ) %>%
+        gather(specificity,seropos,-c(variables,end_window,day))%>%
+        ggplot(aes(y=variables,x=seropos,fill=factor(day)))+
+                geom_col(position = "dodge")+
+        facet_grid(specificity~as.numeric(end_window))+
+        scale_x_continuous("Proportion Seropositive",breaks = seq(0.1,0.6,0.1))+
+        scale_fill_viridis_d(direction=-1)+
+        theme_bw()+
+        theme(panel.grid.minor = element_blank())+
+        ylab("MBA markers")
+
+raw_df %>% 
+        filter(age>=18) %>%
+        group_by(variables,end_window,day) %>%
+        summarize(n=n(),
+                  `90% Specificity`=mean(spec90_seropos),
+                  `95% Specificity`=mean(spec95_seropos),
+                  `99% Specificity`=mean(spec99_seropos)
+                  ) %>%
+        gather(specificity,seropos,-c(variables,end_window,day,n))%>%
+        filter(specificity=="99% Specificity") %>%
+        filter(end_window==300) %>%
+        filter(variables=="Reduced Panel IgG")
+
+
+
+```
+
+
+```{r}
+#calculate time to equivalent FPR
+
+
+# step 1: find the time of maximum FPR and filter those out whose MEDIAN does not breach the basefpr
+
+step1<-tvfpr_df %>% group_by(variables,age_group,end_window,seropos_type) %>%
+        # filter(median==max(median))%>%
+        summarize(
+                max_fpr=max(median),
+                peak_time=time[median==max(median)],
+                  ) %>%
+        filter(peak_time>1)%>%
+        filter(peak_time<365) %>%
+        mutate(base_fpr = case_when(
+                seropos_type == "spec90_seropos" ~ 0.1,
+                seropos_type == "spec95_seropos" ~ 0.05,
+                seropos_type == "spec99_seropos" ~ 0.01
+        )) %>%
+        mutate(diff=max_fpr-base_fpr) %>%
+        filter(diff>0) %>%
+        select(-diff,-max_fpr)
+
+# step 2: filter only to those time AFTER the peak FPR
+tvfpr_df %>% 
+        left_join(step1,
+                       by = c("variables", "seropos_type",
+                              "end_window", "age_group")) %>%
+        filter(time>=peak_time) %>%
+        gather(parameter,fpr,-c(time,variables,age_group,end_window,
+                                  seropos_type,
+                                   peak_time,
+                                  base_fpr
+                                  )) %>%
+        mutate(diff=abs(fpr-base_fpr)) %>%
+        group_by(variables,age_group,end_window,seropos_type,parameter) %>%
+        filter(diff==min(diff)) %>%
+        select(-diff,-fpr)%>%
+        spread(parameter,time)  %>% 
+        filter(variables=="Reduced Panel IgG") %>%
+        # filter(variables=="CtxB IgG") %>%
+        View()
+
+
+# step 3: find the difference between observed and expected
+# step 4: find the time that minimizes that difference
+
+
+tvfpr_df %>% 
+        filter(time>7) %>%
+        # filter(end_window==120) %>% 
+        # filter(seropos_type=="spec90_seropos") %>%
+        # filter(age_group=="Adult") %>%
+        # filter(variables=="All MBA")%>%
+        gather(parameter,value,-c(time,variables,age_group,end_window,seropos_type)) %>%
+        mutate(base_fpr = case_when(
+                seropos_type == "spec90_seropos" ~ 0.1,
+                seropos_type == "spec95_seropos" ~ 0.05,
+                seropos_type == "spec99_seropos" ~ 0.01
+        ))
+        mutate(diff=base_fpr-value) %>%
+        filter(diff<=0) %>%
+        group_by(parameter,
+                 variables,
+                 end_window,
+                 age_group,
+                 seropos_type
+                 )%>%
+        filter(diff==max(diff)) %>% View()
+
+
+```
+
+
+
+
+```{r}
+
+# Compare vibs and find potential re-infections
+# only have vibriocidals for adults so far
+
+online_pntd <- read_excel("data/raw_data/cohort_data/pntd.0007057.s002 (1).xlsx") %>%
+        mutate(id=paste0("R2_",as.numeric(`ID#`)))  %>%
+                select(id,starts_with("Vb")) %>%
+                gather(sample_measure,titer,-id) %>%
+                filter(!is.na(titer)) %>%
+                mutate(full_test=str_extract(sample_measure,"Vb[O|I]")) %>%
+                mutate(full_test =
+                               case_when(
+                                       full_test=="VbO" ~ "Vibriocidal_Ogawa",
+                                       full_test=="VbI" ~ "Vibriocidal_Inaba"
+                               )
+                               ) %>%
+                mutate(value=log2(titer/5*2)) %>%
+                mutate(value=ifelse(value<0,0,value)) %>%
+                mutate(day=str_extract(sample_measure,"D[0-9]{1,3}")) %>%
+                mutate(day=as.numeric(str_remove(day,"D"))) %>%
+        mutate(sample = paste0(id," d",day))#%>%
+        # #problematic samples with rises in vibriocidal
+        # filter(!sample %in% c("R2_33 d360", note that this one was not selected
+        #                           "R2_4 d180",
+        #                           "R2_4 d360",
+        #                           "R2_46 d180",
+        #                           "R2_46 d360",
+        #                           "R2_50 d360",
+        #                           "R2_58 d360",
+        #                           "R2_63 d360",
+        #                           "R2_7 d180",
+        #                           "R2_7 d360"))
+
+
+ids <- online_pntd %>%
+        arrange(full_test,id,day) %>%
+        group_by(full_test,id)%>%
+        mutate(diff=value-lag(value)) %>%
+        filter(diff>1) %>%
+        filter(day>90) %>%
+        ungroup()%>%
+        arrange(id,day,full_test)
+
+
+
+
+online_pntd %>%
+        filter(id %in% ids$id) %>%
+        filter(day>=90) %>%
+        ggplot(aes(x=factor(day),y=value))+
+                geom_point()+
+                geom_line(aes(group=id,col=id))+
+                facet_grid(id~full_test)
+
+
+online_pntd %>% ggplot(aes(x=factor(day), y=value,col=id %in% vax_wide_RAU$id))+
+                geom_boxplot()+
+                facet_grid(.~full_test)+
+                theme_bw()
+
+
+```
+
+
+```{r}
+
+#application of cutoff analysis to vaccinees
+
+analysisData$RAU_data$wide_data %>%
+        filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
+        mutate(ag=case_when(
+                 age<18 ~ "<18 years",
+                age>=18 ~ "18+ years"
+                
+        ))%>%
+        ggplot(aes(y=Luminex_IgG_OgawaOSPBSA,x=Luminex_IgG_CtxB,
+               col=status)
+               )+
+                geom_point()+
+                geom_hline(lty=2,yintercept = -4)+
+                geom_vline(lty=2,xintercept = -3.1)+
+        facet_wrap(ag~.)+
+        theme_bw()
+
+```
+
+```{r }
+
+
+# analysisData<- LuminexRecPaperData(vaccinee = TRUE)
+# 
+# casecon_analysis <- analysisData$RAU_data$long_data
+# wide_analysis <- analysisData$RAU_data$wide_data
+# 
+# 
+# casecon_analysis %>% filter(status =="Vaccinee") %>%
+#                 filter(test_type=="Luminex") %>%
+#                 filter(antigen  %in% c("OgawaOSPBSA","InabaOSPBSA","CtxB","Sialidase", "TcpA","VCC","CTHT", "O139BSA")) %>%
+#                 ggplot(aes(x=day,y=value,col=age<18))+
+#                         geom_line(aes(group=id),alpha=0.3)+
+#                         geom_smooth(se=FALSE,lty=1,method="loess")+
+#                         facet_grid(isotype~antigen,scales = "free_y")+
+#                         geom_rug(data=casecon_analysis %>% filter(status =="Case") %>%
+#                                 filter(day_actual>5 & day_actual<=180) %>%
+#                                 filter(test_type=="Luminex") %>%
+#                                 filter(antigen  %in% c("OgawaOSPBSA","InabaOSPBSA","CtxB","Sialidase", "TcpA","VCC","CTHT", "O139BSA")),
+#                                 aes(y=value),sides="l",alpha=0.2,col="black")+
+#                         geom_rug(data=casecon_analysis %>% filter(status =="Case") %>%
+#                                 filter(!(day_actual>5 & day_actual<=180)) %>%
+#                                 filter(test_type=="Luminex") %>%
+#                                 filter(antigen  %in% c("OgawaOSPBSA","InabaOSPBSA","CtxB","Sialidase", "TcpA","VCC","CTHT", "O139BSA")),
+#                                 aes(y=value),sides="r",alpha=0.2,col="purple")+
+#                         ylab("log10(RAU)")+
+#                         scale_x_continuous("Days Post Vaccination", trans="sqrt",breaks=c(2,30,180,365),limits=c(0,365))+
+#                         scale_color_brewer(palette = "Set1")+
+#                         theme_bw()+
+#                         theme(panel.grid.minor = element_blank(),
+#                              panel.grid.major.x = element_blank()
+#                               )
+```
+
+
+```{r}
+
+# markers <- casecon_analysis %>% filter(antigen  %in% c("OgawaOSPBSA","InabaOSPBSA","CtxB")) %>% 
+#                                 filter(test_type=="Luminex") %>%
+#                                 filter(isotype=="IgG") %>%
+#                                 distinct(full_test) %>% pull(full_test) %>%
+#                                 c("age","sex","blood") %>%
+#                                 paste(collapse=" + ")
+#                                         
+# 
+# 
+# rf_fit <- wide_analysis %>% filter(status!="Vaccinee") %>% 
+#                 randomForest::randomForest(
+#                                            formula= as.formula(paste0("inf_180 ~ ",markers)),
+#                                            data=.,
+#                                            mtry=3
+#                                            )
+# rf_fit
+# 
+# predictions <- wide_analysis %>% filter(status=="Vaccinee") %>%
+#         predict(newdata=.,rf_fit)  %>%
+#         data.frame(wide_analysis %>% filter(status=="Vaccinee"),
+#                    pred=.
+#                    )
+# 
+# 
+# predictions %>% mutate(pred=factor(pred,labels=c("Not recently infected","Recently infected"))) %>%
+#                         mutate(under18=age<18) %>%
+#                                group_by(pred,day,under18) %>%
+#                                 count() %>%
+#                                 group_by(day,under18) %>%
+#                                 mutate(percent=round(100*n/sum(n))) %>%
+#                                 mutate(final=paste0(n," (",percent,")")) %>%
+#                 select(under18,pred,day,final) %>%
+#                 spread(pred,final)
+            
+
+```
+
+

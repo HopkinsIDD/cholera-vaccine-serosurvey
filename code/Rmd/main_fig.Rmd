@@ -1,0 +1,1351 @@
+---
+title: "Main figures for Cholera serosurveillance in partially vaccinated populations"
+author: "Forrest Jones"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    self_contained: no
+  word_document: default 
+---
+
+```{r setup, include=FALSE}
+
+
+library(knitr)
+
+knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,fig.height = 7,
+                      fig.width = 10, eval=FALSE,
+                      dev="pdf" )
+
+```
+
+
+
+
+
+```{r libraries, eval = TRUE}
+
+source("code/R/packages.R")
+
+source("code/R/utils.R")
+# source("code/R/utils_vax.R")
+# source("code/R/utils_recon.R")
+# source("code/R/utils_qc.R")
+
+
+
+
+
+```
+
+
+
+```{r data, eval=TRUE}
+
+
+# source("code/R/load-data.R")
+
+final_df <- read_rds("data/generated_data/sample_measurements.rds") %>%
+        filter(study_code!="R1") %>%
+        filter(!str_detect(id,"RB"))%>%
+        mutate(day_actual=day) %>%
+        mutate(RAU_value=log10(1/RAU_value))
+        
+
+
+final_wide <- final_df %>% select(study_code,cohort,status,id, day,
+                                  sample,age,sex,marker,RAU_value) %>%
+        spread(marker,RAU_value)
+
+
+```
+
+
+## Table 1:Individual characteristics of culture confirmed cholera patients and vaccinated individuals
+Serological data were also available for three uninfected household contacts of Bangladeshi cases enrolled with measurements taken at 2, 7, and 30 days after enrollment of the initial case
+
+
+```{r eval=TRUE}
+
+
+tab1_df <- final_df %>%
+        filter(status %in% c("Case","Vaccinee")) %>%
+        filter(studycode %in% c("SMIC","PIC","RB","IMS","RB","RIKS2")) %>%
+        distinct(cohort,studycode,id,age_group,sex,blood,culture,status) %>%
+# get categorical variables together
+        group_by(cohort) %>%
+        summarize(n=n(),
+                  `< 5 years`=sum(age_group=="<5 years"),
+                  `5-9 years`=sum(age_group=="5-9 years"),
+                  `10-17 years`=sum(age_group=="10-17 years"),
+                  `18+ years`=sum(age_group=="18+ years"),
+                  
+                  Female = sum(sex=="female"),
+                  
+                  `O Blood Group` = sum(blood=="O"),
+                  
+                  `V. cholerae O1 Ogawa isolated` = sum(culture=="O1-Ogawa"),
+        ) %>%
+        gather(variable,value,-c(cohort,n)) %>% 
+        # filter(!is.na(value)) %>%
+        mutate(percent=round(value/n*100)) %>%
+        mutate(final_value= ifelse(is.na(value),"-",paste0(value," (",percent,")"))) %>%
+        mutate(row_name=paste(variable,"(%)")) %>%
+        select(cohort,n,row_name,final_value)
+
+
+tab1_df %>%
+        mutate(row_name=factor(row_name,
+                               levels = c("< 5 years (%)",                     "5-9 years (%)"  ,                  
+                                          "10-17 years (%)"   ,                "18+ years (%)"     ,               
+                                          "Female (%)"  ,                      "O Blood Group (%)" ,               
+                                          "V. cholerae O1 Ogawa isolated (%)")
+        )) %>%
+        mutate(column_header= case_when(
+                cohort == "SMIC/PIC" ~ "Bangladeshi cholera cases",
+                cohort == "BGD Vaccinee" ~ "Bangladeshi vaccinees",
+                cohort == "HTI Vaccinee" ~ "Haitian vaccinees"
+                
+        )) %>%
+        mutate(column_header=paste0(column_header,"\n(n=",n,")")) %>%
+        select(column_header,row_name,final_value) %>%
+        spread(column_header,final_value) %>%
+        bind_rows(data.frame(row_name="Age Group"),.) %>%
+        rename(Characteristics=row_name) %>%
+        flextable::flextable() %>%
+        flextable::autofit() %>%
+        flextable::padding(i=2:5, j=1, padding.left=20) %>%
+        flextable::align(align = "center",j=2:4,part="all")
+
+```
+
+
+\pagebreak
+
+## Figure 1: Multiplex bead assay measurements of IgG, IgM, and IgA against V. cholerae O1 antigens among vaccinated participants 
+
+Y-axis indicates the log (base 10) of the relative antibody units (RAU) with limits at 10^-2 and 10-5. X-axis is in days and is square-root transformed. Each colored line indicates individual trajectories over time. The solid lines are Loess smooth functions. Rug plots show measurements from confirmed cases and uninfected household contacts classified within a 180-day infection window (black) and outside a 180-day infection window (purple).
+
+```{r spaghetti-netmfi,  eval=TRUE, fig.height = 7, fig.width = 10}
+
+
+fig1_df <- final_df %>% 
+        filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","O139 OSP","CT-B","TcpA")) %>%
+        mutate(antigen_pretty=factor(antigen_pretty,levels=c("Ogawa OSP","Inaba OSP","O139 OSP","CT-B","TcpA"))) %>%
+        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
+
+
+true_pos <- fig1_df %>% filter(
+                   status=="Case",
+                   day > 2,
+                   day<200
+                   )
+
+true_neg <- fig1_df %>%
+                filter(cohort=="SMIC/PIC") %>%
+                anti_join(true_pos)
+        
+
+
+
+fig1_df %>%
+        filter(status=="Vaccinee")  %>%
+        filter(study_code!="R1") %>%
+        mutate(Vaccinee=case_when(
+                cohort == "BGD Vaccinee" & age<10 ~ "Bangladeshi <10 years",
+                cohort == "BGD Vaccinee" & age>=10 ~  "Bangladeshi 10+ years",
+                cohort == "HTI Vaccinee" & age>=10 ~  "Haitian 18+ years"
+        )) %>%
+        ggplot(aes(y=RAU_value))+
+                geom_line(aes(group=id,
+                              x=day,
+                              col=Vaccinee
+                              ),
+                          alpha=0.3
+                          )+
+                geom_rug(data=true_pos,sides="l",col="red",alpha=0.3)+
+                geom_rug(data=true_neg,sides="r",col="black",alpha=0.3)+
+                facet_grid(isotype~antigen_pretty)+
+                scale_color_manual(values = c("cyan","#003262","#FDB515")
+                                   )+
+                scale_x_continuous("Days since first dose",breaks=c(1,30,200,365) ,trans="sqrt")+
+        geom_vline(xintercept = 14,lty=2)+
+        ylab("log10(1/RAU)")+
+        guides(color=guide_legend(override.aes=list(alpha=NA)))+
+        theme_cowplot()+
+        theme(legend.position = "bottom")
+  
+  
+
+```
+
+
+\pagebreak
+
+
+### Figure 2: Misclassification of vaccinated individuals
+
+
+```{r misclassify, eval=FALSE,fig.height = 8, fig.width = 8}
+
+path <- "source/final_code/vax_strategy/generated_rds/fpr-estimates/"
+tree_param <- 1000
+library(rstanarm)
+library(tidybayes)
+
+
+var_list <- list(
+        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age")
+)
+
+#####  Fit RF models and make predictions -------------
+
+fpr_fit_list <- list()
+raw_df <- data.frame()
+
+for(t in c(45,120,200,300)){
+        # for(v in 1:length(var_list)){
+                v <- 1        
+                marks <- var_list[[v]]
+                
+                cat("Window: ",t, "Variables: ",names(var_list)[v],"\n")        
+                
+                
+                # fit_data <- wide_analysis %>%
+                #         addInfectionWindow(end_window=t)
+                fit_data <- final_wide %>%
+                        filter(cohort =="SMIC/PIC")%>% 
+                        mutate(day_actual=day)%>%
+                        addInfectionWindow(end_window=t) 
+                
+                missing <- rowSums(is.na(fit_data[var_list[[v]]])) >0
+                  
+                fit_data <- fit_data[!missing,]      
+                
+                outcome <- paste0("inf_",t)
+                
+                # 1. run 100 models to find a cutoff
+                #keep 50% fit and 50% to test 
+                cut_data <- data.frame()
+                
+                for(j in 1:100){
+                        
+                        n_ind <-unique(fit_data$id) %>% length() 
+                        
+                        #define who is in and who is out
+                        outside <-sample(fit_data$id,round(n_ind*0.5),replace=FALSE)
+                        outside_df <- filter(fit_data,id %in% outside)
+                        inside_df  <- filter(fit_data,!id %in% outside)%>%
+                                addInfectionWindow(end_window=t)
+                        
+                        
+                        # inside_w = NULL
+                        
+                        # if(weighted){
+                        inside_w <- inside_df %>%
+                                getWeight(end_window = t)  %>%
+                                pull(weight)
+                                
+                        # }
+                        
+                        #fit rf model
+                        inside_fit <- ranger::ranger(formula=make_formula(paste0("inf_",t),
+                                                                          var_list[[v]]),
+                                                     data=inside_df,
+                                                     num.trees = 500,
+                                                     case.weights = inside_w,
+                                                     replace=TRUE
+                        )
+                        
+                        
+                        #find the cutoff for each 
+                        performance <- 
+                                outside_df %>% addInfectionWindow(end_window=t) %>%
+                                getPerf_ranger(inside_fit,paste0("inf_",t)#,
+                                               # spec=train_spec_cutoff
+                                )
+                        cut <- distinct(performance$data,youden_cutoff,
+                                        spec99_cutoff,
+                                        spec95_cutoff,
+                                        spec90_cutoff
+                        )
+                        cut_data <- bind_rows(cut_data,cut)
+                }
+                
+                #find cutoffs
+                median_cut <- cut_data %>%
+                        summarize(n =n(),
+                                  youden_cutoff=median(youden_cutoff),
+                                  spec99_cutoff=median(spec99_cutoff),
+                                  spec95_cutoff=median(spec95_cutoff),
+                                  spec90_cutoff=median(spec90_cutoff)
+                        )
+                
+                print(median_cut)
+                
+                # 2. fit the model, predict, and apply cutoff 
+                #fit the model
+                
+                #set weights if needed
+                # w= NULL
+                # if(weighted){
+                w <- fit_data%>%
+                        getWeight(end_window = t)  %>%
+                        pull(weight)
+                        
+                # }
+                
+                this_fit<- ranger::ranger(data=fit_data,
+                                          formula=make_formula(outcome,var_list[[v]]),
+                                          num.trees= tree_param,
+                                          case.weights = w,
+                                          replace = TRUE
+                )
+                
+                #
+                #calculate the individual's samples seropositivity
+                # test_data <- vax_wide_RAU %>%
+                #         addInfectionWindow(end_window=t)
+                test_data <- final_wide %>%
+                        filter(str_detect(cohort,"Vaccinee"))%>%
+                        addInfectionWindow(end_window=t)
+                
+                test_missing <- rowSums(is.na(test_data[var_list[[v]]])) >0
+                
+                test_data <- test_data[!test_missing,]  
+                        
+                        
+                test_data["truth"] <- test_data[outcome]
+                out_preds <-predict(this_fit,
+                                    test_data,
+                                    predict.all=TRUE)
+                
+                #store the data
+                fpr_df <- test_data %>%
+                                              mutate(prediction=out_preds[[1]] %>% rowMeans()-1) %>%
+                                              mutate(youden_cutoff=median_cut$youden_cutoff,
+                                                     spec99_cutoff=median_cut$spec99_cutoff,
+                                                     spec95_cutoff=median_cut$spec95_cutoff,
+                                                     spec90_cutoff=median_cut$spec90_cutoff
+                                              ) %>%
+                                              mutate(
+                                                      youden_seropos = ifelse(prediction>youden_cutoff,
+                                                                              1,0
+                                                      ),
+                                                      spec99_seropos = ifelse(prediction>spec99_cutoff,
+                                                                              1,0),
+                                                      spec95_seropos = ifelse(prediction>spec95_cutoff,
+                                                                              1,0),
+                                                      spec90_seropos = ifelse(prediction>spec90_cutoff,
+                                                                              1,0),
+                                                      
+                                              ) %>%
+                        mutate(variables=names(var_list)[v]) %>%
+                        mutate(end_window=as.character(t))
+                
+                out_tmp <- list(
+                        cutoffs=cut_data,
+                        train=fit_data,
+                        fit=this_fit,
+                        preds=fpr_df
+                )
+                
+                fpr_fit_list[[as.character(t)]][[names(var_list)[v]]] <- out_tmp
+                raw_df <- bind_rows(raw_df,fpr_df)
+                
+        # }
+}
+
+raw_df <- raw_df %>% mutate(variables=factor(variables,levels=names(var_list)))
+
+write_rds(fpr_fit_list,
+          paste0(path,"fpr_fit_list.rds")
+)
+
+write_rds(raw_df,
+          paste0(path,"raw_df.rds")
+)
+
+
+```
+
+```{r}
+raw_df <- read_rds(
+          paste0(path,"raw_df.rds")
+)
+
+
+```
+
+
+```{r}
+
+###check the misclassification
+
+raw_df %>% 
+        mutate(age_group=ifelse(age<10,"child","adult")) %>%
+        group_by(end_window,day) %>%
+        summarize(seropos=mean(spec95_seropos)) %>%
+        ggplot(aes(x=day,y=seropos))+
+        geom_col()+
+        facet_wrap(.~end_window)
+
+
+
+```
+
+```{r eval=FALSE}
+options(mc.cores = 1)
+
+
+tvfpr_fit <- list()
+tvfpr_df <- data.frame()
+
+raw_df_list <- list(
+        
+        `Bangladeshi <10 years` = filter(raw_df, cohort=="BGD Vaccinee") %>%
+                                        filter(age<10),
+        `Bangladeshi 10+ years`= filter(raw_df, cohort=="BGD Vaccinee") %>%
+                                        filter(age>=10),
+        `Haitian 18+ years` = filter(raw_df, cohort=="HTI Vaccinee") ,
+        
+        `All Vaccinees` = raw_df
+
+)
+
+for(t in c(45,120,200,300)){
+        for(dat in names(raw_df_list)){
+                
+        
+
+                        
+                        cat("Window: ",t, " Population: ",dat,"\n")  
+                        
+                        # estimate time-varying sensitivity
+                        tvfpr_tmp <- fit_tvfpr(data = raw_df_list[[dat]] %>%
+                                                       filter(end_window==t),
+                                                  end_window=t,
+                                                  seropos_type= "spec95_seropos",
+                                                  last_time = 365,
+                                                  curve="cubic"
+                        )
+                        
+                        tvfpr_fit[[as.character(t)]][[dat]] <- tvfpr_tmp
+                        
+                        tmp_df<- tvfpr_tmp$summary_df 
+                        
+                        if(!is.null(tmp_df)){
+                                tmp_df<- tmp_df %>%
+                                        mutate(variables="Reduced IgG Panel")%>%
+                                        mutate(seropos_type="spec95_seropos") %>%
+                                        mutate(end_window=t) %>%
+                                        mutate(population=dat)
+
+                        }
+                        
+                        
+                        tvfpr_df <-bind_rows(tvfpr_df,tmp_df)
+                        
+                        
+                }}
+
+
+
+
+
+write_rds(tvfpr_fit,
+          paste0(path,"tvfpr_fit.rds")
+)
+write_rds(tvfpr_df,
+          paste0(path,"tvfpr_df.rds")
+)
+
+```
+
+
+```{r eval=TRUE}
+
+path <- "source/final_code/vax_strategy/generated_rds/fpr-estimates/"
+
+
+raw_df <- read_rds(
+          paste0(path,"raw_df.rds")
+)
+
+
+tvfpr_df <- read_rds(
+          paste0(path,"tvfpr_df.rds")
+)
+
+
+bgd_fpr<- raw_df %>% 
+        filter((str_detect(cohort,"BGD"))) %>%
+        mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
+        group_by(age_group,end_window,day) %>%
+        summarize(seropos=mean(spec95_seropos)) %>%
+        ggplot(aes(fill=factor(day),col=factor(day),
+                   y=seropos,x=factor(as.numeric(end_window))))+
+        geom_col(position = position_dodge2(0.1))+
+        scale_fill_viridis_d("Days since first dose")+
+        scale_color_viridis_d("Days since first dose")+
+        facet_wrap(age_group~.)+
+        theme_cowplot()+
+        xlab("Infection Window (Days)")+
+        scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+        geom_hline(yintercept = 0.05,lty=2)
+
+cont_fpr <- tvfpr_df %>% 
+        filter(!(str_detect(population,"Bangladesh"))) %>%
+        ggplot(aes(x=time,y=median,col=factor(end_window),
+                   fill=factor(end_window)
+                   ))+
+        geom_line()+
+        geom_ribbon(aes(ymin=lb,ymax=ub),col=NA,
+                                    alpha=0.5,
+                        ) +
+        facet_wrap(.~fct_rev(population))+
+        xlab("Days since first dose")+
+        scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+        scale_fill_brewer("Infection Window (Days)",palette = "Dark2")+
+        scale_color_brewer("Infection Window (Days)",palette = "Dark2")+
+        theme_cowplot()+
+        geom_hline(yintercept = 0.05,lty=2)
+
+plot_grid(bgd_fpr+theme(legend.position = "bottom"),
+          cont_fpr+theme(legend.position = "bottom"),
+          labels=c("A","B"),nrow=2)
+
+
+```
+
+\pagebreak
+
+### Figure 3: Comparison of serological measurements among recently infected and recently vaccinated individuals. 
+Boxplots show the distributions for each antibody measurement (A). Only a subset of Bangladeshi vaccinees had measurements for anti-O139 OSP IgA and IgM. The two dimensions of the separate multidimensional scaling analyses are shown in the scatterplot for each denoted time window (B). 
+
+```{r compare, eval=TRUE,fig.height = 8, fig.width = 8}
+
+generate_MDS <- function(data,regex_string="Ogawa|Inaba|TcpA|CtxB|IgG_O139"){
+        
+        mds_data <- data %>% 
+                select(vaxinf_class,matches(regex_string))
+                # select(vaxinf_class,matches("Ogawa|Inaba|TcpA|IgG_O139"))
+        
+        mds_dist = dist(x = scale(mds_data[,-1]))
+        mds_analysis <- mds(delta = mds_dist , ndim = 2 , type = "ratio")
+        
+        out <- bind_cols(select(mds_data,vaxinf_class),
+                              as.data.frame(mds_analysis$conf))
+        
+        return(out)
+        
+}
+
+
+compare_data <- final_df %>%
+        filter(status %in% c("Vaccinee","Case") ) %>%
+        filter(study_code!="R1") %>%
+        # filter(cohort %in% c("BGD Vaccinee","SMIC/PIC")) %>%
+        #limit vaccinees to only baseline and "recent samples"
+        # filter(!(status=="Vaccinee" & !(day>3  & day <45))) %>%
+        mutate(vaxinf_class =case_when(
+                status=="Case" & day > 3 & day<200 ~ "Recently Infected",
+                status=="Vaccinee" & day> 3 & day<200 ~ "Recently Vaccinated",
+                TRUE ~ "Neither"
+        )) %>%
+        left_join(antigen_df)  %>%
+        filter(vaxinf_class!="Neither")
+
+
+compare_data_wide<- compare_data %>%
+        select(sample,id,vaxinf_class,isotype,antigen_pretty,marker,RAU_value,day,age,status) %>% 
+                        select(-isotype,-antigen_pretty) %>%
+                        # mutate(RAU_value=log10(1/RAU_value)) %>%
+                        spread(marker,RAU_value) %>%
+                        mutate(vaxinf_class=str_remove_all(vaxinf_class," |,")) %>%
+                        mutate(vaxinf_class=factor(vaxinf_class))
+
+
+boxplot <- compare_data %>% 
+                filter(antigen_pretty %in% c("Ogawa OSP","CT-B","TcpA","Inaba OSP","O139 OSP"))%>%
+                mutate(antigen_pretty=factor(antigen_pretty,
+                                             levels=c("Ogawa OSP","Inaba OSP",
+                                                      "O139 OSP", "CT-B", "TcpA")
+                )) %>%
+                mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
+                mutate(vaxinf_class=case_when(
+                        vaxinf_class=="Recently Infected" ~ "Infected <200 days ago",
+                        vaxinf_class=="Recently Vaccinated" ~ "Vaccinated <200 days ago"
+                )) %>%
+                ggplot(aes(x=antigen_pretty,y=RAU_value,col=vaxinf_class))+
+                geom_boxplot()+
+                facet_wrap(.~isotype,nrow=1)+
+                theme_cowplot()+
+                theme(#axis.text.x = element_text(angle=45,hjust=1),
+                        legend.position="bottom"
+                )+
+                xlab("Antigen")+
+                scale_color_manual("Class", values=c("red","darkblue"))+
+                ylab("log10(1/RAU)")+
+                theme(axis.text.x = element_text(angle=45,
+                                                 hjust=1
+                ))
+
+
+
+mds_plot <- bind_rows(
+        compare_data_wide %>% filter(day<=45) %>%
+                generate_MDS() %>% mutate(time_window="<=45 days"),
+        compare_data_wide %>% filter(day>45 & day<=120)%>%
+                generate_MDS() %>% mutate(time_window="46-120 days"),
+        compare_data_wide %>% filter(day>120 & day<=200)%>%
+                generate_MDS() %>% mutate(time_window="121-200 days")
+)%>%
+        mutate(time_window=factor(time_window,
+                                  levels=c("<=45 days",
+                                           "46-120 days",
+                                           "121-200 days"
+                                           )
+        )) %>%
+
+        mutate(vaxinf_class=recode(vaxinf_class,
+                                   "RecentlyInfected" ="Recently Infected",
+                                   "RecentlyVaccinated"="Recently Vaccinated"
+        )) %>%
+                ggplot(aes(x=D1,y=D2,col=vaxinf_class)) +
+                geom_point(alpha=0.5,shape=16)+
+                scale_color_manual("Class", values=c("red","darkblue"))+
+                xlab("Dimension 1")+
+                ylab("Dimension 2")+
+        facet_wrap(.~time_window,scales="free")+
+        theme_cowplot()
+
+
+plot_grid(boxplot,
+          mds_plot+theme(legend.position="none"),
+          nrow=2,
+          labels=c("A","B"))
+
+```
+
+```{r}
+compare_data <- final_df %>%
+        filter(status %in% c("Vaccinee","Case") ) %>%
+        filter(study_code!="R1") %>%
+        # filter(cohort %in% c("BGD Vaccinee","SMIC/PIC")) %>%
+        #limit vaccinees to only baseline and "recent samples"
+        # filter(!(status=="Vaccinee" & !(day>3  & day <45))) %>%
+        mutate(vaxinf_class =case_when(
+                status=="Case" & day > 3 & day<200 ~ "Recently Infected",
+                status=="Vaccinee" & day> 3 & day<200 ~ "Recently Vaccinated",
+                TRUE ~ "Neither"
+        )) %>%
+        left_join(antigen_df)  %>%
+        filter(vaxinf_class!="Neither")
+
+
+compare_data_wide<- compare_data %>%
+        select(sample,id,vaxinf_class,isotype,antigen_pretty,marker,RAU_value,day,age,status) %>% 
+                        select(-isotype,-antigen_pretty) %>%
+                        # mutate(RAU_value=log10(1/RAU_value)) %>%
+                        spread(marker,RAU_value) %>%
+                        mutate(vaxinf_class=str_remove_all(vaxinf_class," |,")) %>%
+                        mutate(vaxinf_class=factor(vaxinf_class))
+
+
+boxplot <- compare_data %>% 
+                filter(antigen_pretty %in% c("Ogawa OSP","CT-B","TcpA","Inaba OSP","O139 OSP"))%>%
+                mutate(antigen_pretty=factor(antigen_pretty,
+                                             levels=c("Ogawa OSP","Inaba OSP",
+                                                      "O139 OSP", "CT-B", "TcpA")
+                )) %>%
+                mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
+                mutate(vaxinf_class=case_when(
+                        vaxinf_class=="Recently Infected" ~ "Infected <200 days ago",
+                        vaxinf_class=="Recently Vaccinated" ~ "Vaccinated <200 days ago"
+                )) %>%
+                ggplot(aes(x=antigen_pretty,y=RAU_value,col=vaxinf_class))+
+                geom_boxplot()+
+                facet_wrap(.~isotype,nrow=1)+
+                theme_cowplot()+
+                theme(#axis.text.x = element_text(angle=45,hjust=1),
+                        legend.position="bottom"
+                )+
+                xlab("Antigen")+
+                scale_color_manual("Class", values=c("red","darkblue"))+
+                ylab("log10(1/RAU)")+
+                theme(axis.text.x = element_text(angle=45,
+                                                 hjust=1
+                ))
+
+
+
+mds_plot <- bind_rows(
+        compare_data_wide %>% filter(day<=45) %>%
+                generate_MDS(regex_string="Ogawa|Inaba|TcpA|IgG_O139") %>% mutate(time_window="<=45 days"),
+        compare_data_wide %>% filter(day>45 & day<=120)%>%
+                generate_MDS(regex_string="Ogawa|Inaba|TcpA|IgG_O139") %>% mutate(time_window="46-120 days"),
+        compare_data_wide %>% filter(day>120 & day<=200)%>%
+                generate_MDS(regex_string="Ogawa|Inaba|TcpA|CtxB|IgG_O139") %>% mutate(time_window="121-200 days")
+)%>%
+        mutate(time_window=factor(time_window,
+                                  levels=c("<=45 days",
+                                           "46-120 days",
+                                           "121-200 days"
+                                           )
+        )) %>%
+
+        mutate(vaxinf_class=recode(vaxinf_class,
+                                   "RecentlyInfected" ="Recently Infected",
+                                   "RecentlyVaccinated"="Recently Vaccinated"
+        )) %>%
+                ggplot(aes(x=D1,y=D2,col=vaxinf_class)) +
+                geom_point(alpha=0.5,shape=16)+
+                scale_color_manual("Class", values=c("red","darkblue"))+
+                xlab("Dimension 1")+
+                ylab("Dimension 2")+
+        facet_wrap(.~time_window,scales="free")+
+        theme_cowplot()
+
+
+plot_grid(boxplot,
+          mds_plot+theme(legend.position="none"),
+          nrow=2,
+          labels=c("A","B"))
+
+
+```
+
+
+\pagebreak
+
+
+### Figure 4 : Three class model
+
+```{r}
+
+### markers
+three_var <- data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba")) %>%
+                filter(str_detect(marker,"IgG")) %>% 
+                unlist() %>% unname()
+
+all_var <- data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist() %>% c("age") %>% unname()
+
+
+final_wide_nomissing <- final_wide[rowSums(is.na(final_wide[all_var]))==0,]
+
+
+bangladeshi_fitdata <- final_wide_nomissing %>%
+                filter(cohort %in% c("SMIC/PIC","BGD Vaccinee")) %>%
+                mutate(vaxinf_class =case_when(
+                        status=="Case" & day > 3 & day<200 ~ "RecentlyInfected",
+                        status=="Vaccinee" & day> 3 & day<200 ~ "RecentlyVaccinated",
+                        TRUE ~ "Neither"
+                ))  %>%
+         mutate(vaxinf_class2 =case_when(
+                        status=="Case" & day > 3 & day<200 ~ "RecentlyInfected",
+                        TRUE ~ "Neither"
+                ))  %>%
+        mutate(rowIndex=1:nrow(.))
+
+
+```
+
+
+
+```{r loocv}
+
+path <- "source/final_code/vax_strategy/generated_rds/vax-classification/loocv/"
+
+
+formula_all <- make_formula("vaxinf_class",all_var)
+fit_all <- runCaretLOOCV(formula_all, dat=bangladeshi_fitdata)
+write_rds(fit_all, paste0(path,"fit_all.rds"))
+
+# importance_all <- caret::varImp(fit_all,scale=FALSE)
+
+
+formula_three <- make_formula("vaxinf_class",three_var)
+fit_three <- runCaretLOOCV(formula_three, dat=bangladeshi_fitdata)
+write_rds(fit_three,paste0(path,"fit_three.rds"))
+
+# importance_three <- caret::varImp(fit_three,scale=FALSE)
+
+```
+
+
+```{r}
+
+path <- "source/final_code/vax_strategy/generated_rds/vax-classification/loocv/"
+
+fit_all <- read_rds(paste0(path,"fit_all.rds"))
+fit_three <- read_rds(paste0(path,"fit_three.rds"))
+
+
+
+fit_all$pred %>% select(obs,Neither,RecentlyInfected,RecentlyVaccinated,rowIndex) %>%
+        gather(pred,proportion,-c(obs,rowIndex)) %>%
+        left_join(bangladeshi_fitdata) %>%
+        ggplot(aes(y=reorder(sample,day),x=proportion,fill=pred))+
+        geom_col()+
+        facet_wrap(obs~paste(cohort,status),scales = "free")+
+        theme_cowplot()+
+        scale_fill_brewer("Predicted Class",palette="Dark2")+
+        xlab("Proportion of Trees")+
+        ylab("Sample ID")
+
+coverage <- 0.5
+
+fit_all$pred %>% 
+        group_by(pred,obs) %>%
+        count() %>%
+        group_by(obs)%>%
+        mutate(prop=n/sum(n)) %>%
+        arrange(obs) %>%
+        filter(obs!="RecentlyInfected") %>%
+        ungroup() %>%
+        mutate(multi=coverage*prop) %>%
+        group_by(pred) %>%
+        summarize(prop=sum(multi))
+
+
+fit_all$pred %>% select(obs,Neither,RecentlyInfected,RecentlyVaccinated,rowIndex,pred) %>%
+        gather(class,proportion,-c(obs,rowIndex,pred)) %>%
+        left_join(bangladeshi_fitdata) %>%
+        ggplot(aes(x=day,y=proportion))+
+        geom_line(aes(group=id),alpha=0.3)+
+        geom_point(aes(col=obs))+
+        facet_grid(class~paste(cohort,status),scales = "free")+
+        theme_cowplot()+
+        scale_color_brewer("Observed", palette="Dark2")+
+        ylab("Proportion of Trees")
+
+
+
+fit_all$pred %>% select(obs,Neither,RecentlyInfected,RecentlyVaccinated,rowIndex,pred) %>%
+        gather(class,proportion,-c(obs,rowIndex,pred)) %>%
+        left_join(bangladeshi_fitdata) %>%
+        ggplot(aes(col=class,y=proportion,x=obs))+
+        geom_boxplot()+
+        facet_grid(.~paste(cohort,status),scales = "free",space = "free")+
+        theme_cowplot()+
+        scale_color_brewer("Predicted", palette="Dark2")+
+        ylab("Proportion of Trees")+
+        xlab("Observed")+
+        coord_flip()
+
+        
+
+
+```
+
+
+```{r external-validation}
+
+formula_all <- make_formula("vaxinf_class",all_var)
+formula_three <- make_formula("vaxinf_class",three_var)
+formula_all2 <- make_formula("vaxinf_class2",all_var)
+formula_three2 <- make_formula("vaxinf_class2",three_var)
+
+ranger_all <- ranger::ranger(formula_all, bangladeshi_fitdata %>%
+                                     mutate(vaxinf_class=factor(vaxinf_class))
+                                     )
+ranger_three <- ranger::ranger(formula_three, bangladeshi_fitdata %>%
+                                     mutate(vaxinf_class=factor(vaxinf_class))
+                                     )
+ranger_all2 <- ranger::ranger(formula_all2, bangladeshi_fitdata %>%
+                                     mutate(vaxinf_class2=factor(vaxinf_class2))
+                                     )
+ranger_three2 <- ranger::ranger(formula_three2, bangladeshi_fitdata %>%
+                                     mutate(vaxinf_class2=factor(vaxinf_class2))
+                                     )
+
+test_data <-final_wide_nomissing %>%
+                filter(cohort %in% c("HTI Vaccinee","ETEC Challenge")) %>%
+                mutate(`Full Set 3-class`=predict(ranger_all,data=.)$predictions,
+                       `Three Markers 3-class`=predict(ranger_three,.)$predictions,
+                       `Full Set 2-class`=predict(ranger_all2,.)$predictions,
+                       `Three Markers 2-class`=predict(ranger_three2,.)$predictions
+                       ) 
+
+test_data %>%
+        select(cohort,day, `Full Set 3-class`, `Three Markers 3-class`, `Full Set 2-class`, `Three Markers 2-class`) %>%
+        gather(model,prediction,-c(cohort,day)) %>%
+        group_by(model,day) %>%
+        summarize(FPR=mean(prediction=="RecentlyInfected")) %>%
+        ggplot(aes(x=factor(day),y=FPR))+ geom_col(position = position_dodge2())+
+        facet_wrap(.~model,nrow=1)+
+        theme_cowplot()+
+        theme(axis.text.x = element_text(angle=45,hjust=1))
+```
+
+```{r}
+
+path <- "source/final_code/vax_strategy/generated_rds/vax-classification/loocv/"
+
+fit_all <- read_rds(paste0(path,"fit_all.rds"))
+fit_three <- read_rds(paste0(path,"fit_three.rds"))
+
+
+prop_df <- bind_rows(
+                bangladeshi_fitdata %>% 
+                        mutate(rowIndex=1:n()) %>%
+                        left_join(fit_all$pred) %>%
+                        mutate(markers="Full Set"),
+                bangladeshi_fitdata %>% 
+                        mutate(rowIndex=1:n()) %>%
+                        left_join(fit_three$pred) %>%
+                        mutate(markers="Three Markers"),
+)
+
+roc_df <- prop_df %>%
+        select(obs,RecentlyInfected,RecentlyVaccinated,markers)  %>%
+        gather(Class,value,-c(obs,markers)) %>%
+        mutate(truth=ifelse(obs==Class,1,0))
+
+
+
+
+#show roc curves and variable importance
+p4a <- roc_df %>%
+        mutate(Class = str_replace(Class,"Recently","Recently ")) %>% 
+        ggplot()+ 
+        geom_roc(aes(m = value, d = truth,col=Class,lty=markers),labels=FALSE,n.cuts=0)+ 
+        geom_abline(lty=3,col="grey50")+
+        xlab("False Positivity Rate")+
+        ylab("True Positivity Rate")+
+        scale_color_manual("Markers",values=c("red","darkblue"))+
+        theme_cowplot()+
+        facet_wrap(.~Class)+
+        theme(legend.position = "bottom")
+
+
+# prop_df %>% filter(status=="Contact") %>%
+#         group_by(markers) %>%
+#         summarize(prop=mean(pred=="Neither"))
+
+p4b <- prop_df %>% filter(status %in% c("Vaccinee","Case")) %>%
+        group_by(markers,day,status) %>%
+        summarize(`Recently Vaccinated`=mean(pred=="RecentlyVaccinated"),
+                  `Recently Infected`=mean(pred=="RecentlyInfected")
+                  ) %>%
+        gather(Prediction,`Proportion Predicted`,-c(markers,day,status)) %>%
+        ggplot(aes(x=day,y=`Proportion Predicted`))+
+                geom_line(aes(lty=markers,col=Prediction))+
+        scale_y_continuous(limits=c(0,1))+
+        theme_cowplot()+
+        facet_grid(.~status,scales="free_x")+
+        scale_color_manual(values=c("red","darkblue"))+
+        xlab("Days since exposure")+
+        theme(legend.position = "none")
+ 
+
+
+test_data <-final_wide_nomissing %>%
+                filter(cohort %in% c("HTI Vaccinee","ETEC Challenge")) %>%
+                mutate(`Full Set`=predict(fit_all,.),
+                       `Three Markers`=predict(fit_three,.)
+                       ) 
+
+
+p4c <- test_data %>% filter(cohort=="HTI Vaccinee") %>%
+        select(day,`Full Set`,`Three Markers`) %>%
+        gather(Markers,prediction,-day) %>%
+        group_by(day,Markers) %>%
+        summarize(`Recently Vaccinated`=mean(prediction=="RecentlyVaccinated"),
+                  `Recently Infected`=mean(prediction=="RecentlyInfected"),
+                  ) %>%
+        gather(category,proportion,-c(day,Markers)) %>%
+        ggplot(aes(x=day,y=proportion))+
+        geom_line(aes(col=category,lty=Markers))+
+        theme_cowplot()+
+        scale_y_continuous("Proportion Predicted",limits=c(0,1))+
+        xlab("Days since vaccination")+
+        scale_color_manual(values=c("red","darkblue"))+
+        theme(legend.position = "none")
+
+
+
+
+plot_grid(p4a,p4b, p4c,ncol=1,
+          labels=c("A","B","C")
+          )
+
+# prop_df %>% filter(status=="Case") %>%
+#         group_by(markers,day) %>%
+#         summarize(prop=mean(pred=="RecentlyInfected")) %>%
+#         ggplot(aes(x=day,y=prop))+
+#                 geom_line(aes(lty=markers),col="red")+
+#         scale_y_continuous(limits=c(0,1))+
+#         scale_x_continuous(trans="sqrt")+
+#         theme_bw()
+        
+        
+
+
+
+
+```
+
+```{r}
+
+#confusion matrix
+
+prop_df %>%
+                group_by(pred,obs,markers) %>%
+                count() %>%
+                group_by(obs,markers) %>%
+                mutate(prop=n/sum(n))%>%
+                mutate(Predicted = str_replace(pred,"Recently","Recently\n")) %>%
+                mutate(Observed = str_replace(obs,"Recently","Recently\n")) %>%
+                ggplot(aes(x=Observed,y=Predicted))+
+                        geom_tile(aes(fill=prop*100))+
+                        # scale_fill_viridis_c("%",limits=c(0,100),direction = -1)+
+                        scale_fill_distiller("%",
+                                             palette = "Oranges",
+                                             limits=c(0,100),direction = 1)+
+                        geom_text(aes(label=scales::percent(prop,1)))+
+                theme_cowplot()+
+                theme(axis.text.x = element_text(angle=45,hjust=1))+
+                facet_wrap(.~markers)
+
+
+
+```
+
+```{r}
+
+
+test_data <-final_wide_nomissing %>%
+                filter(cohort %in% c("HTI Vaccinee","ETEC Challenge")) %>%
+                mutate(`Full Set`=predict(fit_all,.),
+                       `Three Markers`=predict(fit_three,.)
+                       ) 
+
+
+test_data %>% filter(cohort=="HTI Vaccinee") %>%
+        select(day,`Full Set`,`Three Markers`) %>%
+        gather(Markers,prediction,-day) %>%
+        group_by(day,Markers) %>%
+        summarize(`Recently Vaccinated`=mean(prediction=="RecentlyVaccinated"),
+                  `Recently Infected`=mean(prediction=="RecentlyInfected"),
+                  `Neither`=mean(prediction=="Neither")
+                  ) %>%
+        gather(category,proportion,-c(day,Markers)) %>%
+        mutate(category=factor(category,levels=c("Neither",
+                                                 "Recently Vaccinated",
+                                                 "Recently Infected"
+                                                 ))) %>%
+        ggplot(aes(x=factor(day),y=proportion))+
+        geom_col(aes(fill=Markers),position=position_dodge())+
+        facet_wrap(.~category)
+
+test_data %>% filter(cohort=="HTI Vaccinee") %>%
+        select(day,`Full Set`,`Three Markers`) %>%
+        gather(Markers,prediction,-day) %>%
+        group_by(day,Markers) %>%
+        summarize(`Recently Vaccinated`=mean(prediction=="RecentlyVaccinated"),
+                  `Recently Infected`=mean(prediction=="RecentlyInfected"),
+                  `Neither`=mean(prediction=="Neither")
+                  ) %>%
+        gather(category,proportion,-c(day,Markers)) %>%
+        mutate(category=factor(category,levels=c("Neither",
+                                                 "Recently Vaccinated",
+                                                 "Recently Infected"
+                                                 ))) %>%
+        ggplot(aes(x=factor(day),y=proportion))+
+        geom_col(aes(fill=category))+
+        facet_wrap(.~Markers)
+
+
+
+
+
+
+```
+
+
+
+## Two class model
+
+```{r}
+
+bangladeshi_twofitdata <- final_wide_nomissing %>%
+                filter(cohort %in% c("SMIC/PIC","BGD Vaccinee")) %>%
+                mutate(vaxinf_class =case_when(
+                        status=="Case" & day > 3 & day<200 ~ "RecentlyInfected",
+                        TRUE ~ "NotRecentlyInfected"
+                )) 
+
+two_formula_all <- make_formula("vaxinf_class",all_var)
+two_fit_all <- runCaretLOOCV(formula_all, dat=bangladeshi_twofitdata)
+two_importance_all <- caret::varImp(two_fit_all,scale=FALSE)
+
+
+two_formula_three <- make_formula("vaxinf_class",three_var)
+two_fit_three <- runCaretLOOCV(formula_three, dat=bangladeshi_twofitdata)
+two_importance_three <- caret::varImp(two_fit_three,scale=FALSE)
+
+
+
+
+two_prop_df <- bind_rows(
+                bangladeshi_fitdata %>% 
+                        mutate(rowIndex=1:n()) %>%
+                        left_join(two_fit_all$pred) %>%
+                        mutate(markers="Full Set"),
+                bangladeshi_fitdata %>% 
+                        mutate(rowIndex=1:n()) %>%
+                        left_join(two_fit_three$pred) %>%
+                        mutate(markers="Three Markers"),
+)
+        
+
+
+two_roc_df <- two_prop_df %>%
+        select(obs,RecentlyInfected,markers)  %>%
+        gather(Class,value,-c(obs,markers)) %>%
+        mutate(truth=ifelse(obs==Class,1,0))
+
+
+two_roc_df %>%
+        mutate(Class = str_replace(Class,"Recently","Recently ")) %>%
+        ggplot()+ 
+        geom_roc(aes(m = value, d = truth,col=Class,lty=markers),labels=FALSE,n.cuts=0)+ 
+        geom_abline(lty=3,col="grey50")+
+        xlab("False Positivity Rate")+
+        ylab("True Positivity Rate")+
+        scale_color_manual(values=c("red","darkblue"))+
+        theme_cowplot()#+
+
+
+        
+
+two_prop_df %>%
+                group_by(pred,obs,markers) %>%
+                count() %>%
+                group_by(obs,markers) %>%
+                mutate(prop=n/sum(n))%>%
+                mutate(Predicted = str_replace(pred,"Recently","Recently\n")) %>%
+                mutate(Observed = str_replace(obs,"Recently","Recently\n")) %>%
+                ggplot(aes(x=Observed,y=Predicted))+
+                        geom_tile(aes(fill=prop*100))+
+                        # scale_fill_viridis_c("%",limits=c(0,100),direction = -1)+
+                        scale_fill_distiller("%",
+                                             palette = "Oranges",
+                                             limits=c(0,100),direction = 1)+
+                        geom_text(aes(label=scales::percent(prop,1)))+
+                theme_cowplot()+
+                theme(axis.text.x = element_text(angle=45,hjust=1))+
+                facet_wrap(.~markers)
+
+
+
+
+two_test_data <-final_wide_nomissing %>%
+                filter(cohort %in% c("HTI Vaccinee"))%>%
+                mutate(`Full Set`=predict(two_fit_all,.),
+                       `Three Markers`=predict(two_fit_three,.)
+                       )         
+
+two_test_data %>% 
+        select(day,`Full Set`,`Three Markers`) %>%
+        gather(Markers,prediction,-day) %>%
+        group_by(day,Markers) %>%
+        summarize(
+                  `Recently Infected`=mean(prediction=="RecentlyInfected"),
+                  `Not Recently Infected`=mean(prediction=="NotRecentlyInfected")
+                  ) %>%
+        gather(category,proportion,-c(day,Markers)) %>%
+        ggplot(aes(x=factor(day),y=proportion))+
+        geom_col(aes(fill=Markers),position=position_dodge2())+
+        facet_wrap(.~category)
+
+
+
+
+```
+
+
+```{r etec}
+
+
+final_df %>% filter(cohort %in% c("ETEC Challenge","SMIC/PIC")) %>%
+        filter(day<50) %>%
+        filter(status=="Case" | is.na(status))%>%
+        filter(antigen_pretty %in% c("CT-B","Ogawa OSP")) %>%
+        ggplot(aes(x=factor(day),y=RAU_value,col=cohort)
+               )+
+        geom_line(aes(group=id),  alpha=0.5)+
+        facet_grid(antigen_pretty~isotype)+
+        theme_cowplot()
+
+
+etec_pred <-final_wide %>%
+                filter(cohort %in% c("ETEC Challenge"))%>%
+                mutate(
+                       `Three Markers`=predict(two_fit_three,.)
+                       )       
+
+
+
+
+etec_pred %>% 
+        ggplot(aes(y=id,x=factor(day)))+
+        geom_tile(aes(fill=`Three Markers`))
+
+
+```
+
+
+
+Current figure 4 is everything below
+
+```{r}
+
+
+multi_class_data <- final_df %>%
+        filter(status %in% c("Vaccinee","Case","Contact") ) %>%
+        # filter(cohort %in% c("BGD Vaccinee","SMIC/PIC")) %>%
+        #limit vaccinees to only baseline and "recent samples"
+        # filter(!(status=="Vaccinee" & !(day>3  & day <45))) %>%
+        mutate(vaxinf_class =case_when(
+                status=="Case" & day > 3 & day<200 ~ "Recently Infected",
+                status=="Vaccinee" & day> 3 & day<200 ~ "Recently Vaccinated",
+                TRUE ~ "Neither"
+        )) %>%
+        left_join(antigen_df) 
+
+
+var_list <- multi_class_data %>% distinct(marker) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist() %>% c("age") %>% as.character()
+
+
+caret_data <- multi_class_data %>%
+        select(cohort,sample,id,vaxinf_class,isotype,antigen_pretty,marker,RAU_value,day,age,status) %>% 
+        filter(marker %in% var_list) %>%
+                        select(-isotype,-antigen_pretty) %>%
+                        mutate(RAU_value=log10(1/RAU_value)) %>%
+                        spread(marker,RAU_value) %>%
+                        mutate(vaxinf_class=str_remove_all(vaxinf_class," |,")) %>%
+                        mutate(vaxinf_class=factor(vaxinf_class))
+
+
+
+
+formula_all <- make_formula("vaxinf_class",var_list)
+fit_all <- runCaretLOOCV(formula_all, dat=caret_data_nomissing)
+importance_all <- caret::varImp(fit_all,scale=FALSE)
+
+write_rds(fit_all,"source/final_code/vax_strategy/generated_rds/fit_all.rds")
+write_rds(importance_all,"source/final_code/vax_strategy/generated_rds/importance_all.rds")
+```
+
+
+```{r}
+
+fit_all <- read_rds("source/final_code/vax_strategy/generated_rds/fit_all.rds")
+importance_all <- read_rds("source/final_code/vax_strategy/generated_rds/importance_all.rds")
+
+
+
+proportion_15 <- caret_data_nomissing %>% 
+        mutate(rowIndex=1:n()) %>%
+        left_join(fit_all$pred)
+
+roc_df15 <- proportion_15 %>%
+        select(obs,RecentlyInfected,RecentlyVaccinated)  %>%
+        gather(Class,value,-obs) %>%
+        mutate(truth=ifelse(obs==Class,1,0))
+
+
+#show roc curves and variable importance
+roc_curve <- roc_df15 %>%
+        mutate(Class = str_replace(Class,"Recently","Recently ")) %>%
+        ggplot()+ 
+        geom_roc(aes(m = value, d = truth,col=Class),labels=FALSE,n.cuts=0)+ 
+        geom_abline(lty=2,col="grey50")+
+        xlab("False Positivity Rate")+
+        ylab("True Positivity Rate")+
+        scale_color_manual(values=c("red","darkblue"))+
+        theme_cowplot()+
+        theme(legend.position = "none")
+
+
+importance_plot <- importance_all$importance %>%
+        mutate(Antibody=rownames(.)) %>%
+        # left_join(distinct(multi_class_data,marker,
+        #                    isotype,antigen,antigen_pretty)) %>%
+        # mutate(Antibody=glue::glue("anti-{antigen_pretty} {isotype}")) %>%
+        # slice_max(Overall,n=10)%>%
+        ggplot(aes(x=Overall,y=reorder(Antibody,Overall)))+
+                geom_col()+
+        # scale_x_continuous("Gini Index",breaks=c(0,15,30),limits = c(0,30))+
+        theme_bw()+
+        theme(legend.position = "none",
+              panel.grid=element_blank(),
+              axis.title.y = element_blank()
+             )
+
+
+# model_plot<- ggdraw() +
+#         draw_plot(roc_curve) +
+        # draw_plot(importance_plot, x = 0.45, y = 0.23, width = .5, height = .6)
+
+# confusion matrix
+confusion_plot <- proportion_15 %>%
+                group_by(pred,obs) %>%
+                count() %>%
+                group_by(obs) %>%
+                mutate(prop=n/sum(n))%>%
+                mutate(Predicted = str_replace(pred,"Recently","Recently\n")) %>%
+                mutate(Observed = str_replace(obs,"Recently","Recently\n")) %>%
+                ggplot(aes(x=Observed,y=Predicted))+
+                        geom_tile(aes(fill=prop*100))+
+                        # scale_fill_viridis_c("%",limits=c(0,100),direction = -1)+
+                        scale_fill_distiller("%",
+                                             palette = "Oranges",
+                                             limits=c(0,100),direction = 1)+
+                        geom_text(aes(label=scales::percent(prop,1)))+
+                theme_cowplot()+
+                theme(axis.text.x = element_text(angle=45,hjust=1))
+
+
+
+plot_grid(roc_curve,importance_plot,confusion_plot,labels=c("A","B","C"))
+
+
+
+#Using all the data
+#use a 200 day window
+#unweighted model with age for now
+
+
+#Conduct LOOCV
+#show importance
+#show the confusion matrix
+
+#Using just the bangladeshi data
+
+#Conduct LOOCV
+#show importance
+#show the confusion matrix
+
+#apply bangladeshi model to haitian data
+
+```
+
+
+\pagebreak
+
+
+### Figure 5
+
+
+
+
+
