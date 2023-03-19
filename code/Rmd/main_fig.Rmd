@@ -463,7 +463,7 @@ write_rds(tvfpr_df,
 ```
 
 
-```{r eval=TRUE}
+```{r eval=FALSE}
 
 path <- "source/final_code/vax_strategy/generated_rds/fpr-estimates/"
 
@@ -523,7 +523,7 @@ plot_grid(bgd_fpr+theme(legend.position = "bottom"),
 ### Figure 3: Comparison of serological measurements among recently infected and recently vaccinated individuals. 
 Boxplots show the distributions for each antibody measurement (A). Only a subset of Bangladeshi vaccinees had measurements for anti-O139 OSP IgA and IgM. The two dimensions of the separate multidimensional scaling analyses are shown in the scatterplot for each denoted time window (B). 
 
-```{r compare, eval=TRUE,fig.height = 8, fig.width = 8}
+```{r compare, eval=FALSE,fig.height = 8, fig.width = 8}
 
 generate_MDS <- function(data,regex_string="Ogawa|Inaba|TcpA|CtxB|IgG_O139"){
         

@@ -2,7 +2,7 @@
 
 #dropbox token
 
-token <- read_rds('data/generated_data/dropbox_token/token.rds')
+# token <- read_rds('data/generated_data/dropbox_token/token.rds')
 
 
 
