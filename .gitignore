@@ -48,8 +48,9 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-# data files
+# large files
 /data
+/figures
 
 # mac files
 .DS_Store
