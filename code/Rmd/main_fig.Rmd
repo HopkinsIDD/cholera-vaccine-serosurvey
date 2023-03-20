@@ -25,39 +25,11 @@ knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,
 
 
 
-```{r libraries, eval = TRUE}
+```{r load, eval = TRUE}
 
 source("code/R/packages.R")
-
 source("code/R/utils.R")
-# source("code/R/utils_vax.R")
-# source("code/R/utils_recon.R")
-# source("code/R/utils_qc.R")
-
-
-
-
-
-```
-
-
-
-```{r data, eval=TRUE}
-
-
-# source("code/R/load-data.R")
-
-final_df <- read_rds("data/generated_data/sample_measurements.rds") %>%
-        filter(study_code!="R1") %>%
-        filter(!str_detect(id,"RB"))%>%
-        mutate(day_actual=day) %>%
-        mutate(RAU_value=log10(1/RAU_value))
-        
-
-
-final_wide <- final_df %>% select(study_code,cohort,status,id, day,
-                                  sample,age,sex,marker,RAU_value) %>%
-        spread(marker,RAU_value)
+source("code/R/load-data.R")
 
 
 ```
@@ -158,11 +130,6 @@ true_neg <- fig1_df %>%
 
 fig1_df %>%
         filter(status=="Vaccinee")  %>%
-        mutate(Vaccinee=case_when(
-                cohort == "BGD Vaccinee" & age<10 ~ "Bangladeshi <10 years",
-                cohort == "BGD Vaccinee" & age>=10 ~  "Bangladeshi 10+ years",
-                cohort == "HTI Vaccinee" & age>=10 ~  "Haitian 18+ years"
-        )) %>%
         ggplot(aes(y=RAU_value))+
                 geom_line(aes(group=id,
                               x=day,
@@ -194,8 +161,47 @@ fig1_df %>%
 
 ```{r f2-misclassify}
 
-#run misclassification
+# Misclassification.R provides predictions for misclassification of vaccinees
+# source("code/R/misclassification.R")
 
+misclassify_df2 <- read_rds("data/generated_data/misclassify_df2.rds")
+
+misclassify_df2 %>%
+        filter((str_detect(cohort,"BGD"))) %>%
+        mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
+        group_by(day,age_group,end_window) %>%
+        summarize(seropos=mean(spec95_seropos))%>%
+        ggplot(aes(fill=factor(day),col=factor(day),
+                   y=seropos,x=factor(as.numeric(end_window))))+
+        geom_col(position = position_dodge2(0.1))+
+        scale_fill_viridis_d("Days since first dose")+
+        scale_color_viridis_d("Days since first dose")+
+        facet_wrap(age_group~.)+
+        theme_cowplot()+
+        xlab("Infection Window (Days)")+
+        scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+        geom_hline(yintercept = 0.05,lty=2)
+
+
+# misclassify_df <- read_rds("data/generated_data/misclassify_df.rds")
+# 
+# misclassify_df %>%
+#         filter((str_detect(cohort,"BGD"))) %>%
+#         mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
+#         group_by(day,age_group) %>%
+#         summarize(across(original_45day:original_300day,.fns=mean)) %>%
+#         gather(model,seropos,-c(day,age_group)) %>%
+#         mutate(end_window=str_extract(model,"[0-9]{2,3}")) %>%
+#         ggplot(aes(fill=factor(day),col=factor(day),
+#                    y=seropos,x=factor(as.numeric(end_window))))+
+#         geom_col(position = position_dodge2(0.1))+
+#         scale_fill_viridis_d("Days since first dose")+
+#         scale_color_viridis_d("Days since first dose")+
+#         facet_wrap(age_group~.)+
+#         theme_cowplot()+
+#         xlab("Infection Window (Days)")+
+#         # scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+#         geom_hline(yintercept = 0.05,lty=2)
 
 
 ```
@@ -206,15 +212,6 @@ fig1_df %>%
 
 ```{r misclassify, eval=FALSE,fig.height = 8, fig.width = 8}
 
-path <- "source/final_code/vax_strategy/generated_rds/fpr-estimates/"
-tree_param <- 1000
-library(rstanarm)
-library(tidybayes)
-
-
-var_list <- list(
-        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age")
-)
 
 #####  Fit RF models and make predictions -------------
 
