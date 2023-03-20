@@ -200,6 +200,25 @@ write_rds(raw_df, "data/generated_data/misclassify_df2.rds")
 # #save misclassify_df
 # write_rds(misclassify_df, "data/generated_data/misclassify_df.rds")
         
+# misclassify_df <- read_rds("data/generated_data/misclassify_df.rds")
+# 
+# misclassify_df %>%
+#         filter((str_detect(cohort,"BGD"))) %>%
+#         mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
+#         group_by(day,age_group) %>%
+#         summarize(across(original_45day:original_300day,.fns=mean)) %>%
+#         gather(model,seropos,-c(day,age_group)) %>%
+#         mutate(end_window=str_extract(model,"[0-9]{2,3}")) %>%
+#         ggplot(aes(fill=factor(day),col=factor(day),
+#                    y=seropos,x=factor(as.numeric(end_window))))+
+#         geom_col(position = position_dodge2(0.1))+
+#         scale_fill_viridis_d("Days since first dose")+
+#         scale_color_viridis_d("Days since first dose")+
+#         facet_wrap(age_group~.)+
+#         theme_cowplot()+
+#         xlab("Infection Window (Days)")+
+#         # scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+#         geom_hline(yintercept = 0.05,lty=2)
 
 
 

@@ -159,15 +159,29 @@ fig1_df %>%
 
 ### Figure 2: Misclassification of vaccinated individuals
 
-```{r f2-misclassify}
+
+```{r misclassification, eval=FALSE}
 
 # Misclassification.R provides predictions for misclassification of vaccinees
 # source("code/R/misclassification.R")
 
+```
+
+```{r multidimensional-scaling, eval=FALSE}
+
+# multidimensional-scaling provides object with mds analysis
+# source("code/R/multidimensional-scaling.R")
+
+```
+
+```{r f2-misclassify-mds}
+
+
+#get data for misclassification
 misclassify_df2 <- read_rds("data/generated_data/misclassify_df2.rds")
 
-misclassify_df2 %>%
-        filter((str_detect(cohort,"BGD"))) %>%
+f2a <- misclassify_df2 %>%
+        filter(cohort == "BGD Vaccinee") %>%
         mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
         group_by(day,age_group,end_window) %>%
         summarize(seropos=mean(spec95_seropos))%>%
@@ -183,231 +197,25 @@ misclassify_df2 %>%
         geom_hline(yintercept = 0.05,lty=2)
 
 
-# misclassify_df <- read_rds("data/generated_data/misclassify_df.rds")
-# 
-# misclassify_df %>%
-#         filter((str_detect(cohort,"BGD"))) %>%
-#         mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
-#         group_by(day,age_group) %>%
-#         summarize(across(original_45day:original_300day,.fns=mean)) %>%
-#         gather(model,seropos,-c(day,age_group)) %>%
-#         mutate(end_window=str_extract(model,"[0-9]{2,3}")) %>%
-#         ggplot(aes(fill=factor(day),col=factor(day),
-#                    y=seropos,x=factor(as.numeric(end_window))))+
-#         geom_col(position = position_dodge2(0.1))+
-#         scale_fill_viridis_d("Days since first dose")+
-#         scale_color_viridis_d("Days since first dose")+
-#         facet_wrap(age_group~.)+
-#         theme_cowplot()+
-#         xlab("Infection Window (Days)")+
-#         # scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
-#         geom_hline(yintercept = 0.05,lty=2)
+#get mds measurements
+mds_obj <- read_rds("data/generated_data/mds_obj.rds")
+
+
+mds_obj %>%
+                ggplot(aes(x=D1,y=D2,col=status)) +
+                geom_point(alpha=0.5,shape=16)+
+                scale_color_manual("Class", values=c("red","darkblue"))+
+                xlab("Dimension 1")+
+                ylab("Dimension 2")+
+        facet_wrap(.~time_window,scales="free")+
+        theme_cowplot()
+
+
 
 
 ```
 
 
-
-
-
-```{r misclassify, eval=FALSE,fig.height = 8, fig.width = 8}
-
-
-#####  Fit RF models and make predictions -------------
-
-fpr_fit_list <- list()
-raw_df <- data.frame()
-
-for(t in c(45,120,200,300)){
-        # for(v in 1:length(var_list)){
-                v <- 1        
-                marks <- var_list[[v]]
-                
-                cat("Window: ",t, "Variables: ",names(var_list)[v],"\n")        
-                
-                
-                # fit_data <- wide_analysis %>%
-                #         addInfectionWindow(end_window=t)
-                fit_data <- final_wide %>%
-                        filter(cohort =="SMIC/PIC")%>% 
-                        mutate(day_actual=day)%>%
-                        addInfectionWindow(end_window=t) 
-                
-                missing <- rowSums(is.na(fit_data[var_list[[v]]])) >0
-                  
-                fit_data <- fit_data[!missing,]      
-                
-                outcome <- paste0("inf_",t)
-                
-                # 1. run 100 models to find a cutoff
-                #keep 50% fit and 50% to test 
-                cut_data <- data.frame()
-                
-                for(j in 1:100){
-                        
-                        n_ind <-unique(fit_data$id) %>% length() 
-                        
-                        #define who is in and who is out
-                        outside <-sample(fit_data$id,round(n_ind*0.5),replace=FALSE)
-                        outside_df <- filter(fit_data,id %in% outside)
-                        inside_df  <- filter(fit_data,!id %in% outside)%>%
-                                addInfectionWindow(end_window=t)
-                        
-                        
-                        # inside_w = NULL
-                        
-                        # if(weighted){
-                        inside_w <- inside_df %>%
-                                getWeight(end_window = t)  %>%
-                                pull(weight)
-                                
-                        # }
-                        
-                        #fit rf model
-                        inside_fit <- ranger::ranger(formula=make_formula(paste0("inf_",t),
-                                                                          var_list[[v]]),
-                                                     data=inside_df,
-                                                     num.trees = 500,
-                                                     case.weights = inside_w,
-                                                     replace=TRUE
-                        )
-                        
-                        
-                        #find the cutoff for each 
-                        performance <- 
-                                outside_df %>% addInfectionWindow(end_window=t) %>%
-                                getPerf_ranger(inside_fit,paste0("inf_",t)#,
-                                               # spec=train_spec_cutoff
-                                )
-                        cut <- distinct(performance$data,youden_cutoff,
-                                        spec99_cutoff,
-                                        spec95_cutoff,
-                                        spec90_cutoff
-                        )
-                        cut_data <- bind_rows(cut_data,cut)
-                }
-                
-                #find cutoffs
-                median_cut <- cut_data %>%
-                        summarize(n =n(),
-                                  youden_cutoff=median(youden_cutoff),
-                                  spec99_cutoff=median(spec99_cutoff),
-                                  spec95_cutoff=median(spec95_cutoff),
-                                  spec90_cutoff=median(spec90_cutoff)
-                        )
-                
-                print(median_cut)
-                
-                # 2. fit the model, predict, and apply cutoff 
-                #fit the model
-                
-                #set weights if needed
-                # w= NULL
-                # if(weighted){
-                w <- fit_data%>%
-                        getWeight(end_window = t)  %>%
-                        pull(weight)
-                        
-                # }
-                
-                this_fit<- ranger::ranger(data=fit_data,
-                                          formula=make_formula(outcome,var_list[[v]]),
-                                          num.trees= tree_param,
-                                          case.weights = w,
-                                          replace = TRUE
-                )
-                
-                #
-                #calculate the individual's samples seropositivity
-                # test_data <- vax_wide_RAU %>%
-                #         addInfectionWindow(end_window=t)
-                test_data <- final_wide %>%
-                        filter(str_detect(cohort,"Vaccinee"))%>%
-                        addInfectionWindow(end_window=t)
-                
-                test_missing <- rowSums(is.na(test_data[var_list[[v]]])) >0
-                
-                test_data <- test_data[!test_missing,]  
-                        
-                        
-                test_data["truth"] <- test_data[outcome]
-                out_preds <-predict(this_fit,
-                                    test_data,
-                                    predict.all=TRUE)
-                
-                #store the data
-                fpr_df <- test_data %>%
-                                              mutate(prediction=out_preds[[1]] %>% rowMeans()-1) %>%
-                                              mutate(youden_cutoff=median_cut$youden_cutoff,
-                                                     spec99_cutoff=median_cut$spec99_cutoff,
-                                                     spec95_cutoff=median_cut$spec95_cutoff,
-                                                     spec90_cutoff=median_cut$spec90_cutoff
-                                              ) %>%
-                                              mutate(
-                                                      youden_seropos = ifelse(prediction>youden_cutoff,
-                                                                              1,0
-                                                      ),
-                                                      spec99_seropos = ifelse(prediction>spec99_cutoff,
-                                                                              1,0),
-                                                      spec95_seropos = ifelse(prediction>spec95_cutoff,
-                                                                              1,0),
-                                                      spec90_seropos = ifelse(prediction>spec90_cutoff,
-                                                                              1,0),
-                                                      
-                                              ) %>%
-                        mutate(variables=names(var_list)[v]) %>%
-                        mutate(end_window=as.character(t))
-                
-                out_tmp <- list(
-                        cutoffs=cut_data,
-                        train=fit_data,
-                        fit=this_fit,
-                        preds=fpr_df
-                )
-                
-                fpr_fit_list[[as.character(t)]][[names(var_list)[v]]] <- out_tmp
-                raw_df <- bind_rows(raw_df,fpr_df)
-                
-        # }
-}
-
-raw_df <- raw_df %>% mutate(variables=factor(variables,levels=names(var_list)))
-
-write_rds(fpr_fit_list,
-          paste0(path,"fpr_fit_list.rds")
-)
-
-write_rds(raw_df,
-          paste0(path,"raw_df.rds")
-)
-
-
-```
-
-```{r}
-raw_df <- read_rds(
-          paste0(path,"raw_df.rds")
-)
-
-
-```
-
-
-```{r}
-
-###check the misclassification
-
-raw_df %>% 
-        mutate(age_group=ifelse(age<10,"child","adult")) %>%
-        group_by(end_window,day) %>%
-        summarize(seropos=mean(spec95_seropos)) %>%
-        ggplot(aes(x=day,y=seropos))+
-        geom_col()+
-        facet_wrap(.~end_window)
-
-
-
-```
 
 ```{r eval=FALSE}
 options(mc.cores = 1)
@@ -540,21 +348,7 @@ Boxplots show the distributions for each antibody measurement (A). Only a subset
 
 ```{r compare, eval=FALSE,fig.height = 8, fig.width = 8}
 
-generate_MDS <- function(data,regex_string="Ogawa|Inaba|TcpA|CtxB|IgG_O139"){
-        
-        mds_data <- data %>% 
-                select(vaxinf_class,matches(regex_string))
-                # select(vaxinf_class,matches("Ogawa|Inaba|TcpA|IgG_O139"))
-        
-        mds_dist = dist(x = scale(mds_data[,-1]))
-        mds_analysis <- mds(delta = mds_dist , ndim = 2 , type = "ratio")
-        
-        out <- bind_cols(select(mds_data,vaxinf_class),
-                              as.data.frame(mds_analysis$conf))
-        
-        return(out)
-        
-}
+
 
 
 compare_data <- final_df %>%
