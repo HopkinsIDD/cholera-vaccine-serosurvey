@@ -174,7 +174,7 @@ fig1_df %>%
 
 ```
 
-```{r f2-misclassify-mds}
+```{r f2-misclassify-mds, eval=TRUE}
 
 
 #get data for misclassification
@@ -194,22 +194,27 @@ f2a <- misclassify_df2 %>%
         theme_cowplot()+
         xlab("Infection Window (Days)")+
         scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
-        geom_hline(yintercept = 0.05,lty=2)
+        geom_hline(yintercept = 0.05,lty=2)+
+        theme(legend.position = "bottom")
 
 
 #get mds measurements
 mds_obj <- read_rds("data/generated_data/mds_obj.rds")
 
 
-mds_obj %>%
+f2b <- mds_obj %>%
                 ggplot(aes(x=D1,y=D2,col=status)) +
                 geom_point(alpha=0.5,shape=16)+
                 scale_color_manual("Class", values=c("red","darkblue"))+
                 xlab("Dimension 1")+
                 ylab("Dimension 2")+
         facet_wrap(.~time_window,scales="free")+
-        theme_cowplot()
+        theme_cowplot()+
+        theme(legend.position = "bottom")
 
+
+
+plot_grid(f2a,f2b,ncol=1)
 
 
 
