@@ -226,12 +226,12 @@ plot_grid(f2a,f2b,ncol=1,
 
 ## Figure 3: LOOCV
 
-```{r f3-loocv, eval=TRUE,fig.width=7,fig.height=7}
+```{r f3-loocv, eval=TRUE,fig.width=5.5,fig.height=9}
 
 loocv_df <- read_rds("data/generated_data/loocv_df.rds")
 
 
-f3a <- raw_df %>%
+f3a <- loocv_df %>%
         ggplot()+ 
         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=variables),labels=FALSE,n.cuts=0)+ 
         geom_abline(lty=3,col="grey50")+
@@ -239,10 +239,10 @@ f3a <- raw_df %>%
         ylab("True Positivity Rate")+
         scale_color_brewer("Model",palette ="Dark2")+
         theme_cowplot()+
-        theme(legend.position = "bottom")
+        theme(legend.position = "none")
 
 
-f3b <- raw_df %>%
+f3b <- loocv_df %>%
         group_by(variables,day,status)%>%
         summarize(seropos=mean(spec95_seropos)) %>%
         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
@@ -256,9 +256,70 @@ f3b <- raw_df %>%
         theme(axis.text.x = element_text(hjust=1,angle=45),
               legend.position = "none")
 
-plot_grid(f3a,f3b,ncol = 1,labels = c("A","B"))
+
+external_df <- read_rds("data/generated_data/external_df.rds")
+
+
+f3c <- external_df %>%
+        filter(training_set == "Vax included" | variables=="Reduced IgG Panel") %>%
+        mutate(variables=ifelse(training_set=="No vax included",
+                                "Original",variables
+                                )) %>%
+        group_by(variables,day,cohort)%>%
+        summarize(seropos=mean(spec95_seropos)) %>%
+        mutate(variables=factor(variables,
+                                levels=c(
+                                         
+                                         "All Variables",
+                                         "Reduced IgG Panel",
+                                         "Original"
+                                         ))) %>%
+        mutate(variables=fct_rev(variables))%>%
+        ggplot(aes(x=factor(day),fill=variables,y=seropos))+
+        geom_col(position=position_dodge2())+
+        geom_hline(yintercept = 0.05,lty=2)+
+        theme_cowplot()+
+        xlab("Day")+
+        ylab("Seropositivity"               )+
+        scale_fill_brewer("Model",palette="Dark2",direction = -1)+
+        theme(axis.text.x = element_text(hjust=1,angle=45))
+
+plot_grid(f3a,f3b, f3c, ncol = 1,labels = c("A","B","C"))
 
 ```
+
+
+# Figure 4: External validation
+
+```{r}
+
+external_df <- read_rds("data/generated_data/external_df.rds")
+
+
+external_df %>%
+        filter(training_set == "Vax included" | variables=="Reduced IgG Panel") %>%
+        mutate(variables=ifelse(training_set=="No vax included",
+                                "Original",variables
+                                )) %>%
+        group_by(variables,day,cohort)%>%
+        summarize(seropos=mean(spec95_seropos)) %>%
+        mutate(variables=factor(variables,
+                                levels=c("All Variables",
+                                         "Reduced IgG Panel",
+                                         "Original"
+                                         ))) %>%
+        mutate(variables=fct_rev(variables))%>%
+        ggplot(aes(x=factor(day),fill=variables,y=seropos))+
+        geom_col(position=position_dodge2())+
+        geom_hline(yintercept = 0.05,lty=2)+
+        theme_cowplot()+
+        xlab("Day")+
+        ylab("Seropositivity"               )+
+        scale_fill_brewer("Model",palette="Dark2",direction = -1)+
+        theme(axis.text.x = element_text(hjust=1,angle=45))
+
+```
+
 
 
 
