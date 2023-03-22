@@ -66,6 +66,20 @@ source("source/final_code/vax_strategy/R/load-data.R")
 
 ```{r}
 
+final_wide %>% group_by(cohort)%>%
+        summarise(n=n(),
+                  individuals = length(unique(id))
+                  )
+
+final_wide %>% 
+        filter(cohort=="BGD Vaccinee") %>%
+        count(day)
+
+```
+
+
+```{r}
+
 individual_data <-analysisData$netMFI_data$wide_data %>%distinct(status,id,age,day,day_actual,sex,Ogawa)
 
 individual_data %>% distinct(id,day,status) %>% 
