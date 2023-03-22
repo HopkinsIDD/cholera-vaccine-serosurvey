@@ -4666,6 +4666,25 @@ exactBin <- function(p,size,prob) qbinom(p=p,size = size,prob=prob)
 
 ### caret functions
 
+
+runCaretLOOCV <- function(form, dat){
+        
+        caret::train(form,
+              data = dat,
+              method = "ranger",
+              num.trees = 1000,
+              # metric="logLoss",
+              trControl = caret::trainControl(method="LOOCV",
+                                       index = groupKFold_fojo(dat$id),
+                                       sampling="up",
+                                       classProbs = TRUE,
+                                       # summaryFunction=mnLogLoss,
+                                       savePredictions = "final"
+              ),
+              importance = 'impurity'
+        )
+}
+
 #puts things into LOOCV folds
 groupKFold_fojo <- function (group, k = length(unique(group))) {
         g_unique <- unique(group)
@@ -5176,4 +5195,28 @@ mysqrt_trans <- function() {
                   inverse = function(x) ifelse(x<0, 0, x^2),
                   domain = c(0, Inf))
 }
+
+
+
+### Vax paper functions
+#generate the mds 
+generate_MDS <- function(data,regex_string="Ogawa|Inaba|TcpA|CtxB|IgG_O139"){
+        
+        mds_data <- data %>% 
+                select(status,cohort,matches(regex_string))
+        # select(vaxinf_class,matches("Ogawa|Inaba|TcpA|IgG_O139"))
+        
+        mds_dist = dist(x = scale(mds_data[,-c(1,2)]))
+        mds_analysis <- smacof::mds(delta = mds_dist , ndim = 2 , type = "ratio")
+        
+        out <- bind_cols(select(mds_data,status,cohort),
+                         as.data.frame(mds_analysis$conf))
+        
+        return(out)
+        
+}
+
+
+
+
 

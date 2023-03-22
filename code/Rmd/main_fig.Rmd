@@ -159,26 +159,28 @@ fig1_df %>%
 
 ### Figure 2: Misclassification of vaccinated individuals
 
+The proportion of Bangladeshi vaccinees predicted to be cases (using the a previously published random forest model trained on anti-CT-B, anti-Ogawa OSP, anti-Inaba OSP IgG measurements) at each time point is shown (A). The two dimensions calculated from the multidimensional scaling analyses are shown in each scatterplot for each denoted time window (B). Both Haitian and Bangladeshi vaccinees were included.
 
 ```{r misclassification, eval=FALSE}
 
 # Misclassification.R provides predictions for misclassification of vaccinees
-# source("code/R/misclassification.R")
+source("code/R/misclassification.R")
 
 ```
 
 ```{r multidimensional-scaling, eval=FALSE}
 
 # multidimensional-scaling provides object with mds analysis
-# source("code/R/multidimensional-scaling.R")
+source("code/R/multidimensional-scaling.R")
 
 ```
 
-```{r f2-misclassify-mds, eval=TRUE}
+```{r f2-misclassify-mds, eval=TRUE,fig.width=9.1,fig.height=7}
 
 
 #get data for misclassification
 misclassify_df2 <- read_rds("data/generated_data/misclassify_df2.rds")
+
 
 f2a <- misclassify_df2 %>%
         filter(cohort == "BGD Vaccinee") %>%
@@ -203,9 +205,9 @@ mds_obj <- read_rds("data/generated_data/mds_obj.rds")
 
 
 f2b <- mds_obj %>%
-                ggplot(aes(x=D1,y=D2,col=status)) +
+                ggplot(aes(x=D1,y=D2,col=cohort)) +
                 geom_point(alpha=0.5,shape=16)+
-                scale_color_manual("Class", values=c("red","darkblue"))+
+                scale_color_manual("Class", values=c("darkblue","gold","red"))+
                 xlab("Dimension 1")+
                 ylab("Dimension 2")+
         facet_wrap(.~time_window,scales="free")+
@@ -214,11 +216,72 @@ f2b <- mds_obj %>%
 
 
 
-plot_grid(f2a,f2b,ncol=1)
+plot_grid(f2a,f2b,ncol=1,
+          labels=c("A","B"))
 
 
 
 ```
+
+
+## Figure 3: LOOCV
+
+```{r f3-loocv, eval=TRUE,fig.width=7,fig.height=7}
+
+loocv_df <- read_rds("data/generated_data/loocv_df.rds")
+
+
+f3a <- raw_df %>%
+        ggplot()+ 
+        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=variables),labels=FALSE,n.cuts=0)+ 
+        geom_abline(lty=3,col="grey50")+
+        xlab("False Positivity Rate")+
+        ylab("True Positivity Rate")+
+        scale_color_brewer("Model",palette ="Dark2")+
+        theme_cowplot()+
+        theme(legend.position = "bottom")
+
+
+f3b <- raw_df %>%
+        group_by(variables,day,status)%>%
+        summarize(seropos=mean(spec95_seropos)) %>%
+        ggplot(aes(x=factor(day),fill=variables,y=seropos))+
+        geom_col(position=position_dodge2())+
+        facet_grid(.~status,scales="free_x",space="free")+
+        geom_hline(yintercept = 0.05,lty=2)+
+        theme_cowplot()+
+        xlab("Day")+
+        ylab("Seropositivity")+
+        scale_fill_brewer("Model",palette="Dark2")+
+        theme(axis.text.x = element_text(hjust=1,angle=45),
+              legend.position = "none")
+
+plot_grid(f3a,f3b,ncol = 1,labels = c("A","B"))
+
+```
+
+
+
+```{r}
+
+
+formula_all <- make_formula("vaxinf_class",all_var)
+fit_all <- runCaretLOOCV(formula_all, dat=bangladeshi_fitdata)
+write_rds(fit_all, paste0(path,"fit_all.rds"))
+
+# importance_all <- caret::varImp(fit_all,scale=FALSE)
+
+
+formula_three <- make_formula("vaxinf_class",three_var)
+fit_three <- runCaretLOOCV(formula_three, dat=bangladeshi_fitdata)
+write_rds(fit_three,paste0(path,"fit_three.rds"))
+
+# importance_three <- caret::varImp(fit_three,scale=FALSE)
+
+```
+
+
+
 
 
 

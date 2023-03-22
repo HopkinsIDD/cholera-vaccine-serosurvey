@@ -20,7 +20,8 @@ final_wide <- final_df %>% select(study_code,cohort,status,id, day,
         filter(!if_any(.cols= c("RAU_IgG_OgawaOSPBSA",
                                 "RAU_IgG_InabaOSPBSA",
                                 "RAU_IgG_CtxB"),
-                       .fns = is.na ))
+                       .fns = is.na )) %>%
+        mutate(day_actual=day) 
 
 #limit only to those individuals who have these three antigens        
 final_df <- final_df %>% filter(sample %in% final_wide$sample)
