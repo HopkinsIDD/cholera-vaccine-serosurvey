@@ -115,17 +115,24 @@ for(v in 1:length(var_list)){
 
 
 
-write_rds(raw_df, "data/generated_data/loocv_3class_df.rds")
+# write_rds(raw_df, "data/generated_data/loocv_3class_df.rds")
 
 
-raw_df %>% count(variables,three_class,prediction) %>%
+read_rds("data/generated_data/loocv_3class_df.rds") %>%
+        count(variables,three_class,prediction) %>%
                 group_by(variables,three_class) %>%
                 mutate(proportion=n/sum(n)) %>%
+        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
         ggplot(aes(x=three_class,y=prediction))+
-                geom_tile(aes(fill=proportion))+
+                geom_tile(aes(fill=100*proportion))+
                 facet_wrap(.~variables)+
                 geom_text(aes(label=scales::percent(proportion,2)))+
-        scale_fill_distiller(palette = "Oranges",direction = 1)
+        scale_fill_distiller("Percent\nClassified",palette = "Oranges",direction = 1)+
+        xlab("Observed Class")+
+        ylab("Predicted Class")+
+        theme_cowplot()
+        # theme(axis.text.x = element_text(angle=45,hjust=1))
                 
 
 
