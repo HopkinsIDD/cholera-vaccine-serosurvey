@@ -1,0 +1,86 @@
+---
+title: "Quality Control Documentation"
+author: "Forrest Jones"
+date: "5/14/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load, eval = TRUE}
+
+source("code/R/packages.R")
+source("code/R/utils.R")
+# source("code/R/load-data.R")
+
+```
+
+
+## Identify which plates you want to keep and why
+
+Using the layout register file I identified plates that were listed as data and did not require a rerun
+
+```{r}
+
+layout_register <- read_excel("data/raw_data/layout_lookup/layout_register 2.xlsx")
+
+layouts_keep <- layout_register %>%
+                        filter(type %in% c("data","series")) %>%
+                        filter(required_rerun==0)
+
+```
+
+## Run the QC checks on MFI values
+
+We ran a QC report on each of the plates
+
+```{r}
+
+#use the haiti code
+batch_ids <- tail(layouts_keep$batch,5)
+               
+for (i in seq_along(batch_ids)){
+rmarkdown::render(here::here('code/R/qc_files/fullplate_qc.Rmd'),
+                  knit_root_dir = "../../..",
+                  params = list(
+                  batch_id = batch_ids[i]),
+                  output_file = paste0('../../../figures/qc_reports/plate_report_',batch_ids[i], 
+                                      '.html', sep=''))
+}
+
+```
+
+## Identification of any failed plates
+
+```{r}
+
+
+```
+
+## Identification of failed measurements
+
+```{r}
+
+
+```
+
+## Load all of the passing data with layout
+
+```{r}
+
+
+```
+
+## Calculate RAU
+
+
+
+## Save final raw dataset of lab data only 
+
+
+## Compared with previous RAU results
+
+
+

@@ -1,0 +1,309 @@
+---
+date: "`r Sys.Date()`"
+output: 
+    html_document: 
+        toc: true
+        toc_float: true
+params:
+  batch_id: my_batch_id 
+title: "Quality Control for `r params$batch_id`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,message=FALSE,warning=FALSE,
+                      fig.width = 10, fig.height = 8)
+```
+
+
+```{r functions}
+library(tidyverse)
+library(readxl)
+library(cowplot)
+library(here)
+library(downloadthis)
+
+source(here("code/R/qc_files/utils_qc.R"))
+source(here("code/R/qc_files/utils.R"))
+# source(here("code/R/qc_files/set_paths.R"))
+```
+
+```{r load-data}
+batch_id <- params$batch_id 
+print(batch_id)
+# find the layout and file name
+matched_layout <- readxl::read_excel("data/raw_data/layout_lookup/layout_register 2.xlsx") %>% filter(batch==batch_id) 
+path_csv <- paste0("data/raw_data/summaryFI/",matched_layout  %>% pull(data_file))
+extract <- extractData(path_csv)
+```
+
+```{r}
+#get version of layout
+version <- read_excel(paste0("data/raw_data/layout_lookup/layouts/new_layouts/",
+                             matched_layout$file),sheet="version",
+                      range=c("A1:A2"))
+
+# run extraction code based on that version
+source(here::here(paste0("code/R/qc_files/extract_v",unlist(version),".R")))
+```
+
+
+## Overview
+
+- Plate ID: `r extract$batch` 
+- Date of Run: `r extract$date`
+- Technician Name: `r description_df[1,4]`
+- Plate Notes: `r description_df[3,2] %>% as.character()`
+
+Isotype:
+
+```{r}
+antibody_df %>%
+  select(isotype,subclass,wells) %>%
+  flextable::flextable() %>%
+  flextable::autofit()
+
+```
+
+Antigen:
+
+```{r}
+
+beadID_df %>%
+  full_join(antigen_df) %>% 
+  select(antigen,BeadID,coupling_date,lot_number,wells) %>%
+  group_by(antigen, BeadID, coupling_date,lot_number) %>%
+  summarize(wells=paste(wells,collapse="; ")) %>%
+  flextable::flextable() %>%
+  flextable::autofit()
+
+
+```
+
+
+
+## Bead Counts
+
+### Heatmap
+
+```{r}
+
+full_data %>%
+  full_join(expand_grid(location_letter=LETTERS[1:16],
+                        antigen=unique(full_data$antigen)
+  )) %>%
+  filter(!is.na(Sample))%>% 
+  ggplot(aes(x=location_number,
+             y=location_letter),
+  )+
+  geom_tile(aes(fill=Count))+
+  # facet_wrap(.~batch)+
+  scale_fill_viridis_b(option="viridis",direction=-1,breaks=c(1,30,50,100,1000),
+                       trans="sqrt",
+                       limits=c(0,3000)#,
+                       # guide = guide_legend(label.theme = element_text())
+                       
+  )+
+  theme_bw()+
+  facet_wrap(.~antigen)+
+  scale_x_continuous("Number",limits=c(0,24),breaks = c(6,12,18,24))+
+  scale_y_discrete("Letter",limits=LETTERS[1:16] %>% rev())
+
+
+
+```
+
+
+### Antigen-wells with low counts
+
+```{r}
+
+tab1 <- extract$Count %>% filter(Count<50) %>%  
+  group_by(Sample,location) %>%
+  summarize(`<50 Beads occurrences`=n(),
+            `<30 Beads occurrences`=sum(Count<30),
+            `0 Beads occurrences`=sum(Count==0)
+  ) %>%
+  arrange(-`<30 Beads occurrences`) 
+
+tab1 %>%
+  DT::datatable()
+
+tab1 %>% download_this(
+  output_name = paste0("low_bead_counts_",batch_id),
+  output_extension = ".xlsx",
+  button_label = "Download as xlsx",
+  button_type = "warning",
+  has_icon = TRUE,
+  icon = "fa fa-save"
+)
+
+```
+
+
+### Samples without replicates
+
+After removing all measurements with fewer than 30 beads, some samples will not have replicates.
+
+```{r}
+tab2 <- full_data %>% 
+  group_by(Sample,antigen) %>%
+  summarize(`# of observations with 30+ Beads`=sum(Count>30)) %>%
+  filter(`# of observations with 30+ Beads`<=1)
+
+tab2 %>% DT::datatable()
+
+tab2 %>% download_this(
+  output_name = paste0("obs_bead_counts_",batch_id),
+  output_extension = ".xlsx",
+  button_label = "Download as xlsx",
+  button_type = "warning",
+  has_icon = TRUE,
+  icon = "fa fa-save"
+)
+
+
+```
+
+
+
+## Coefficient of variation (CV)
+
+### Positive controls with CV>20%
+
+In the past, we have retested plates when when over half of the positive control dilutions had >=X antigens with a coefficient of variation (calculated from replicate MFI measurements) greater than 20%.
+
+```{r}
+
+cv_df1 <- control_MFI %>%
+  filter(str_detect(Sample,"Hi O1 Pos|Hi O139 Pos|Typhi 6 1:100")) %>%
+  group_by(Sample,antigen,dilution,isotype) %>%
+  summarize(n=n(),
+            mean=mean(Median),
+            sd=sd(Median),
+            cv=sd/mean
+  ) %>%
+  group_by(Sample,dilution,isotype) %>%
+  summarize(antigens=n(),
+            `CV >=20%` = sum(cv>0.2)
+  ) %>%
+  arrange(dilution)
+
+
+cv_df1 %>%DT::datatable()
+
+cv_df1 %>% download_this(
+  output_name = paste0("cv_summary_",batch_id),
+  output_extension = ".xlsx",
+  button_label = "Download as xlsx",
+  button_type = "warning",
+  has_icon = TRUE,
+  icon = "fa fa-save"
+)
+
+```
+
+### CV distribution among samples
+
+```{r}
+
+cv_df2 <- MFI_df %>% 
+  group_by(Sample,antigen,isotype) %>%
+  summarize(n=n(),
+            mean=mean(Median),
+            sd=sd(Median),
+            cv=sd/mean
+  )  %>%
+  mutate(mean=signif(mean,3),
+         sd=signif(sd,3),
+         cv=signif(cv,3),
+  ) %>%
+  filter(n>1) %>%
+  arrange(-cv)
+
+cv_df2 %>% DT::datatable()
+```
+
+Dashed line is at CV of 20%.
+
+```{r}
+cv_df2 %>% ggplot(aes(x=cv))+
+  geom_histogram(aes(fill=isotype))+
+  theme_bw()+
+  facet_wrap(.~antigen)+
+  geom_vline(xintercept=0.2,lty=2,col="black")
+
+
+```
+
+
+
+## Dilution curve
+
+- Dots indicate the log10(MFI) of dilutions on the curve
+- Blue rugplot on left indicates the values of non-control wells
+- Colored rugplot on the right indicate the log10(MFI) values of control wells
+
+```{r}
+control_MFI %>% 
+  filter(isotype=="IgG",!is.na(dilution)) %>%
+  mutate(std_type=case_when(str_detect(Sample,"O1 Standard") ~ "VC O1",
+                            str_detect(Sample,"COVID") ~ "COVID",
+                            str_detect(Sample,"Typhi") ~ "Typhi 6"
+  )) %>% 
+  ggplot()+
+  geom_point(aes(x=log10(dilution),y=log10(Median),pch=std_type),alpha=0.3)+
+  geom_rug(data=control_MFI %>% 
+             filter(is.na(dilution)) %>%
+             filter(isotype=="IgG"),
+           sides="right",
+           aes(y=log10(Median),
+               col=Sample
+           ))+
+  geom_rug(data=sample_MFI,
+           sides="left",
+           aes(y=log10(Median),
+           ),alpha=0.3, col="blue")+
+  facet_wrap(.~antigen)+
+  theme_cowplot()+
+  ylab("log10(MFI)")+
+  ggtitle("IgG Dilution Series")
+
+
+```
+
+
+
+## Full Data
+
+### Luminex Data
+
+```{r}
+
+fd <- full_data %>% 
+  select(location,isotype,antigen,Lot=lot_number,Sample,MFI=Median,Count) 
+
+fd %>%
+  DT::datatable()
+
+fd %>%
+  download_this(
+    output_name = paste0("full_data_",batch_id),
+    output_extension = ".xlsx",
+    button_label = "Download as xlsx",
+    button_type = "warning",
+    has_icon = TRUE,
+    icon = "fa fa-save"
+  )
+```
+
+### Layout File
+
+```{r}
+layout_1 %>% gather(Number,Description,-Letter) %>%
+  mutate(Location=paste0(Letter,Number)) %>% 
+  filter(!is.na(Description)) %>%
+  select(Location,Description) %>%
+  DT::datatable()
+
+
+```
