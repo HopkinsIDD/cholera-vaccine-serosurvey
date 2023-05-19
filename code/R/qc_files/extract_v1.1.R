@@ -130,20 +130,20 @@ standards <- control_MFI %>% filter(str_detect(Sample,"O1 Standard C")) %>%
                 summarize(MFI=(mean(Median)),
                        n())
 
-RAU_data <- data.frame()
-
-for(anti in unique(standards$antigen)){
-        
-        fitLL <- fitLL_model(filter(standards,antigen==anti))
-        
-        tmp_sample_data <- sample_MFI %>% filter(antigen==anti) %>%
-                mutate(RAU=sapply(Median,FUN=get5PLL_RAU,fit=fitLL$fit))
-        
-        
-        
-        RAU_data <- bind_rows(RAU_data,tmp_sample_data)
-
-}
+# RAU_data <- data.frame()
+# 
+# for(anti in unique(standards$antigen)){
+#         
+#         fitLL <- fitLL_model(filter(standards,antigen==anti))
+#         
+#         tmp_sample_data <- sample_MFI %>% filter(antigen==anti) %>%
+#                 mutate(RAU=sapply(Median,FUN=get5PLL_RAU,fit=fitLL$fit))
+#         
+#         
+#         
+#         RAU_data <- bind_rows(RAU_data,tmp_sample_data)
+# 
+# }
 
 
 

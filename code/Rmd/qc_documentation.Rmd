@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r load, eval = TRUE}
 
 source("code/R/packages.R")
-source("code/R/utils.R")
+source("code/R/qc_files/utils.R")
 # source("code/R/load-data.R")
 
 ```
@@ -28,7 +28,30 @@ layout_register <- read_excel("data/raw_data/layout_lookup/layout_register 2.xls
 
 layouts_keep <- layout_register %>%
                         filter(type %in% c("data","series")) %>%
-                        filter(required_rerun==0)
+                        filter(required_rerun==0) %>%
+                        mutate(date=as.Date(date)) %>%
+                        mutate(date=case_when(
+                                batch=="20220131_p0021"~ as.Date("2022-01-31"),
+                                batch=="20220128_p0020"~ as.Date("2022-01-28"),
+                                TRUE ~ date
+                        )) %>%
+                filter(str_detect(batch,"total") |date>as.Date("2021-12-01"))
+
+        
+batch_ids <- layouts_keep$batch
+
+        
+```
+
+
+# match the data up
+
+```{r}
+i=49
+# for (i in seq_along(batch_ids)){
+        batch_id = batch_ids[i]
+        source(here::here(paste0("code/R/qc_files/match_data_layout.R")))
+# }
 
 ```
 
@@ -39,13 +62,14 @@ We ran a QC report on each of the plates
 ```{r}
 
 #use the haiti code
-batch_ids <- tail(layouts_keep$batch,5)
                
 for (i in seq_along(batch_ids)){
+        
 rmarkdown::render(here::here('code/R/qc_files/fullplate_qc.Rmd'),
                   knit_root_dir = "../../..",
                   params = list(
-                  batch_id = batch_ids[i]),
+                  batch_id = batch_ids[i]
+                  ),
                   output_file = paste0('../../../figures/qc_reports/plate_report_',batch_ids[i], 
                                       '.html', sep=''))
 }
