@@ -44,7 +44,6 @@ Serological data were also available for three uninfected household contacts of 
 
 tab1_df <- final_df %>%
         filter(status %in% c("Case","Vaccinee")) %>%
-        filter(studycode %in% c("SMIC","PIC","RB","IMS","RB","RIKS2")) %>%
         distinct(cohort,studycode,id,age_group,sex,blood,culture,status) %>%
 # get categorical variables together
         group_by(cohort) %>%
@@ -224,7 +223,7 @@ plot_grid(f2a,f2b,ncol=1,
 ```
 
 
-## Figure 3: LOOCV
+## Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days). 
 
 ```{r f3-loocv, eval=TRUE,fig.width=5.5,fig.height=9}
 
@@ -240,6 +239,8 @@ f3a <- loocv_df %>%
         scale_color_brewer("Model",palette ="Dark2")+
         theme_cowplot()+
         theme(legend.position = "none")
+
+plotROC::calc_auc(f3a)
 
 
 f3b <- loocv_df %>%
@@ -286,6 +287,219 @@ f3c <- external_df %>%
 
 plot_grid(f3a,f3b, f3c, ncol = 1,labels = c("A","B","C"))
 
+```
+
+## Figure 4: Model performance to distinguish recently infected individuals, recently vaccinated individuals, and individuals neither recently infected nor vaccinated
+
+```{r f4-three-class, eval=TRUE,fig.width=5.5,fig.height=9}
+
+confusion_matrix_df <- read_rds("data/generated_data/loocv_3class_df.rds") %>%
+        count(variables,three_class,prediction) %>%
+                group_by(variables,three_class) %>%
+                mutate(proportion=n/sum(n)) %>%
+        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently "))
+
+
+confusion_plot <- confusion_matrix_df %>%
+        ggplot(aes(x=three_class,y=prediction))+
+                geom_tile(aes(fill=100*proportion))+
+                facet_wrap(.~variables)+
+                geom_text(aes(label=scales::percent(round(proportion,2),1)))+
+        scale_fill_distiller("Percent\nClassified",palette = "Oranges",direction = 1)+
+        xlab("Observed Class")+
+        ylab("Predicted Class")+
+        theme_cowplot()
+
+
+incidence_lvls <- c(0.05,0.10,0.15)
+coverage_lvls <- seq(0,1,0.02)
+
+
+# sens3_df <- confusion_matrix_df %>%
+#         mutate(three_class=str_replace(three_class,"\n"," ")) %>%
+#         select(variables,three_class,prediction,proportion)  %>%
+#         filter(three_class==prediction) %>%
+#         select(variables,three_class,sensitivity=proportion)
+
+#get class level sensitivity and specificity
+class_pred_df <- data.frame()
+for( class in c("Recently Infected", "Recently Vaccinated","Neither")){
+        
+        class_pred_df <- bind_rows(
+                class_pred_df,
+                confusion_matrix_df %>%
+        mutate(three_class=str_replace(three_class,"\n"," ")) %>%
+        select(variables,three_class,prediction,proportion)  %>%
+        spread(prediction,proportion) %>%
+        mutate(percent= ifelse(three_class==class,
+                               !!sym(class),
+                               1 - !!sym(class))) %>%
+        mutate(prediction=class) %>%
+        mutate(parameter=ifelse(three_class==class,
+                                "sensitivity","class_specificity"
+                                ))%>%
+        select(variables,three_class, prediction,percent,parameter)
+                
+        )        
+        
+}
+
+#get sensitivity df
+sens_df <- class_pred_df %>% filter(parameter=="sensitivity") %>%
+        spread(parameter,percent) %>%
+        select(-three_class)
+#get specificity df
+spec_df <- class_pred_df %>% filter(parameter=="class_specificity") %>%
+        select(variables,three_class,prediction,percent) %>%
+        spread(three_class,percent) %>%                       
+        expand_grid(incidence=incidence_lvls,coverage=coverage_lvls) %>%
+        mutate(vax_notinf=coverage*(1-incidence),
+               notboth=1-incidence-vax_notinf
+               ) %>% 
+        mutate(specificity=case_when(
+                prediction=="Neither" ~ (`Recently Infected`*incidence + `Recently Vaccinated`*vax_notinf)/(incidence+vax_notinf),
+                prediction=="Recently Infected" ~ (Neither*notboth + `Recently Vaccinated`*vax_notinf)/(notboth+vax_notinf),
+                prediction=="Recently Vaccinated" ~ (Neither*notboth + `Recently Infected`*incidence)/(notboth+incidence)
+        )) %>%        
+        select(-Neither,-`Recently Infected`,-`Recently Vaccinated`)
+
+
+spec_df %>%filter(coverage==0.5) %>%
+        # filter(variables=="All Variables") %>%
+        filter(incidence==0.1)
+
+
+#calculate PPV and NPV
+PV_df <- left_join(sens_df,spec_df)  %>%
+        mutate(
+                PPV= case_when(
+                        prediction=="Neither"~ notboth*sensitivity/(notboth*sensitivity + (1-notboth)*(1-specificity)) ,
+                        prediction=="Recently Infected"~ incidence*sensitivity/(incidence*sensitivity + (1-incidence)*(1-specificity)),
+                        prediction=="Recently Vaccinated"~vax_notinf*sensitivity/(vax_notinf*sensitivity + (1-vax_notinf)*(1-specificity))
+                       ),
+                NPV= case_when(
+                        prediction=="Neither"~ (1-notboth)*specificity/(notboth*(1-sensitivity) + (1-notboth)*(specificity)) ,
+                        prediction=="Recently Infected"~ (1-incidence)*specificity/(incidence*(1-sensitivity) + (1-incidence)*(specificity)),
+                        prediction=="Recently Vaccinated"~ (1-vax_notinf)*specificity/(vax_notinf*(1-sensitivity) + (1-vax_notinf)*(specificity))
+                       )
+
+        )
+
+
+PV_df %>% filter(variables=="All Variables") %>%
+        filter(incidence==0.1) %>%
+        filter(prediction=="Recently Infected") %>%
+        summarize(min(PPV),
+                  max(PPV),
+                  min(NPV),
+                  max(NPV)
+                  )
+
+PV_df %>% filter(variables=="All Variables") %>%
+        filter(incidence==0.1) %>%
+        filter(prediction=="Recently Vaccinated") %>%
+        mutate(combo=PPV+NPV) %>%
+        filter(combo==max(combo))
+
+
+pred_value_plot <- PV_df %>%
+        filter(incidence==0.1)%>%
+        select(variables,prediction,incidence,coverage,PPV,NPV) %>%
+        pivot_longer(c(PPV,NPV),
+                     names_to = "Predictive Value",
+                     values_to = "Percent"
+                     ) %>%
+        ggplot(aes(x=coverage*100,y=Percent*100,col=`Predictive Value`,
+                   lty=variables
+                   ))+
+                geom_line()+
+                facet_grid(.~prediction)+
+                theme_cowplot()+
+                ylab("Percent")+
+                xlab("Coverage (%)")+
+                scale_linetype_discrete("Model")+
+                theme(legend.position = "bottom")
+
+plot_grid(
+        confusion_plot,pred_value_plot,ncol=1,
+        labels = c("A","B")
+        
+)
+
+```
+
+
+###OLD STUFF
+
+```{r}
+
+
+ss_df <- proportion_15 %>%
+                group_by(pred,obs) %>%
+                count() %>%
+                group_by(obs) %>%
+                mutate(prop=n/sum(n))%>%
+        mutate(obs_vax=ifelse(obs=="RecentlyVaccinated",
+                              "Vaxxed","NotVaxxed"
+                              ),
+               pred_vax=ifelse(pred=="RecentlyVaccinated",
+                              "Vaxxed","NotVaxxed"
+                              ))%>% 
+        group_by(pred_vax,obs,obs_vax) %>%
+        summarize(prop=sum(prop)) %>%
+        ungroup()%>%
+        filter(pred_vax==obs_vax) %>%
+        select(-obs_vax,-pred_vax) %>%
+        spread(obs,prop) %>%
+        mutate(
+                # low_inc=0.01,
+                # high_inc = 0.3
+                med_inc = 0.05
+        ) %>%
+        gather(setting,inc,-c(RecentlyVaccinated,RecentlyInfected,Neither)) #%>%
+        # mutate(sens=RecentlyVaccinated,
+        #        spec=inc*RecentlyInfected+(1-inc)*Neither
+        #        )
+
+
+
+ppv_df <- data.frame(cov=seq(0,0.95,.01)) %>%
+                expand_grid(ss_df) %>%
+        mutate(sens=RecentlyVaccinated,
+               spec=(inc*RecentlyInfected+(1-inc-cov)*Neither)/(1-cov)
+               ) %>%
+        mutate(ppv=cov*sens/(cov*sens+(1-cov)*(1-spec)),
+               npv=(1-cov)*spec/(cov*(1-sens)+(1-cov)*(spec))
+                             ) %>%
+                select(cov,inc,ppv,npv)
+
+
+ppv_df %>% mutate(sum_pv=npv+ppv) %>%
+                filter(sum_pv==max(sum_pv))
+
+
+PPV_plot <- ppv_df%>%
+        gather(pv,value,-c(cov,inc))%>%
+        ggplot(aes(x=cov*100,y=value*100,col=pv))+
+                # geom_vline(xintercept = ppv_df %>% mutate(sum_pv=npv+ppv) %>%
+                #                 filter(sum_pv==max(sum_pv)) %>% pull(cov)*100
+                # ,lty=2,col="grey")+
+                geom_line()+
+                theme_cowplot()+
+                scale_y_continuous("Percent (%)")+
+                scale_x_continuous("Proportion\nRecently Vaccinated (%)", limits=c(-10,125),
+                                   breaks=c(0,50,100)
+                                   )+
+                theme(panel.grid.minor = element_blank(),
+                      panel.grid.major = element_blank(),
+                      legend.position = "none"
+                      )+
+                scale_color_brewer(palette="Accent")+
+        annotate("text",x=105,y=95,label=" Positive\nPredictive Value",
+                 col=RColorBrewer::brewer.pal(3,"Accent")[2])+
+        annotate("text",x=105,y=10,label=" Negative\nPredictive Value",                
+                 col=RColorBrewer::brewer.pal(3,"Accent")[1])
 ```
 
 

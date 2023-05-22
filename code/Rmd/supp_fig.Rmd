@@ -249,15 +249,16 @@ Baseline antibody measurements from cases (2-4 days after infection) and vaccine
 #         left_join(antigen_df)%>%
 #         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
 
-raw_baseline_plot <- analysisData$netMFI_data$long_data %>%
+final_df %>%
         filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
-        filter(test_type=="Luminex") %>%
-        filter(antigen %in% c("CtxB","OgawaOSPBSA","InabaOSPBSA","O139BSA")) %>%
-        left_join(antigen_df)%>%
-        mutate(`Age Group`=ifelse(age>=18,"Adults","Children")) %>%
+        # filter(test_type=="Luminex") %>%
+        filter(!antigen %in% c("CtxB","OgawaOSPBSA","InabaOSPBSA","O139BSA")) %>%
+        # left_join(antigen_df)%>%
+        mutate(`Age Group`=ifelse(age>=10,"Adults","Children")) %>%
         mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))%>%
-        ggplot(aes(y=value,fill=status,col=status,x=`Age Group`))+
+        filter(`Age Group`=="Children")%>%
+        ggplot(aes(y=RAU_value,fill=cohort,col=cohort,x=cohort))+
         # geom_boxplot(fill=NA)+
         geom_dotplot(binaxis = "y", stackdir = "center",
                      position="dodge",
@@ -266,7 +267,7 @@ raw_baseline_plot <- analysisData$netMFI_data$long_data %>%
         # geom_text(data=pvalue_df,label="*",y=4,aes(x=`Age Group`),
         #           inherit.aes = FALSE,  size = 8
         #           )+
-        ylab("Baseline log10(Net MFI)") +
+        # ylab("Baseline log10(Net MFI)") +
         facet_grid(isotype~antigen_pretty)+
         theme_bw()+
         theme(legend.position="bottom")
@@ -276,18 +277,17 @@ bootDF <- read_rds("source/final_code/vax_strategy/generated_rds/bootDF.rds")
 
 
 
-GMT_ratio_plot <- bootDF %>% 
+bootDF %>% 
         group_by(isotype,antigen,`Age Group`) %>%
         summarize(mean=mean(mfi_ratio),
                   lb=quantile(mfi_ratio,0.025),
                   ub=quantile(mfi_ratio,0.975)) %>%
         mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
-        left_join(antigen_df) %>%
         ggplot(aes(x=`Age Group`, col=isotype,y=mean))+
                 geom_point(position = position_dodge(0.5))+
                 geom_linerange(aes(ymin=lb,ymax=ub),
                                position = position_dodge(0.5))+
-        facet_wrap(.~antigen_pretty,nrow=1)+
+        facet_wrap(.~antigen,nrow=1)+
         geom_hline(yintercept=1,lty=2)+
         theme_bw()+
         scale_y_continuous("Geometric Mean\nMFI Ratio", trans="log2")+

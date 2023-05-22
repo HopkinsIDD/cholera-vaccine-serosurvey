@@ -10,11 +10,13 @@ final_df <- read_rds("data/generated_data/sample_measurements.rds") %>%
                 cohort == "BGD Vaccinee" & age<10 ~ "Bangladeshi <10 years",
                 cohort == "BGD Vaccinee" & age>=10 ~  "Bangladeshi 10+ years",
                 cohort == "HTI Vaccinee" & age>=10 ~  "Haitian 18+ years"
-        ))
+        )) %>%
+        mutate(Under18=ifelse(age<18,"<18 years","18+ years"))
+        
 
 
 final_wide <- final_df %>% select(study_code,cohort,status,id, day,
-                                  sample,age,sex,marker,RAU_value) %>%
+                                  sample,age,Under18,sex,marker,RAU_value,culture) %>%
         spread(marker,RAU_value) %>%
         #remove those missing any of the three key antigens for IgG
         filter(!if_any(.cols= c("RAU_IgG_OgawaOSPBSA",

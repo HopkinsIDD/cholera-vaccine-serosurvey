@@ -20,38 +20,14 @@ knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,fig.height = 
 ```
 
 
-
-
-
-```{r libraries, eval = TRUE}
-library(tidyverse)
-library(readxl)
-library(readstata13)
-library(randomForest)
-library(cowplot)
-library(party)
-library(tidybayes)
+```{r load, eval = TRUE}
 
 source("code/R/packages.R")
 source("code/R/utils.R")
 source("code/R/load-data.R")
 
-
-
-library(rstan)
-options(mc.cores = parallel::detectCores())
-rstan_options(auto_write = TRUE)
-
 ```
 
-
-```{r data, eval=TRUE}
-
-source("code/R/load-data.R")
-
-
-
-```
 
 ## Methods
 
@@ -67,46 +43,18 @@ source("code/R/load-data.R")
 
 ```{r}
 
-final_wide %>% group_by(cohort)%>%
+final_wide %>% group_by(cohort,status)%>%
         summarise(n=n(),
                   individuals = length(unique(id))
                   )
 
-final_wide %>% 
-        filter(cohort=="BGD Vaccinee") %>%
-        count(day)
 
-```
+final_wide %>%
+        count(cohort,status,day)
+        
 
+#check sex in Table 1
 
-```{r}
-
-individual_data <-analysisData$netMFI_data$wide_data %>%distinct(status,id,age,day,day_actual,sex,Ogawa)
-
-individual_data %>% distinct(id,day,status) %>% 
-                group_by(status) %>%
-                summarize(n(),length(unique(id)))
-
-individual_data %>% distinct(id,status,age) %>%
-                group_by(status,age<18) %>%
-                count() %>% 
-                group_by(status) %>%
-                mutate(total=sum(n)) %>%
-                mutate(prop=scales::percent(n/total))
-
-individual_data %>% distinct(id,status,sex) %>%
-                group_by(status,sex) %>%
-                count() %>% 
-                group_by(status) %>%
-                mutate(total=sum(n)) %>%
-                mutate(prop=scales::percent(n/total))
-
-individual_data %>% distinct(id,status,Ogawa) %>%
-                group_by(status,Ogawa) %>%
-                count() %>% 
-                group_by(status) %>%
-                mutate(total=sum(n)) %>%
-                mutate(prop=scales::percent(n/total))
 
 individual_data %>% filter(status=="Vaccinee") %>% 
                 filter(age<18) %>%
@@ -136,6 +84,109 @@ individual_data %>% filter(status=="Vaccinee") %>%
 ```
 
 
+## Antibody kinetics of vaccinated volunteers and confirmed cholera cases
+## Misclassification of vaccinated individuals as recently infected
+
+
+```{r}
+
+misclassify_df2 <- read_rds("data/generated_data/misclassify_df2.rds")
+
+
+misclassify_df2 %>%
+        filter(cohort == "BGD Vaccinee") %>% 
+        filter(end_window %in% c(200,300)) %>%
+        filter(day %in% c(14,17,28)) %>%
+        mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
+        group_by(day,age_group,end_window) %>%
+        summarize(seropos=mean(spec95_seropos)) %>%
+        group_by(age_group) %>%
+        summarize(min(seropos),max(seropos))
+
+misclassify_df2 %>%
+        filter(cohort == "BGD Vaccinee") %>% 
+        filter(end_window %in% c(200,300)) %>%
+        filter(day ==42) %>%
+        mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
+        group_by(day,age_group,end_window) %>%
+        summarize(seropos=mean(spec95_seropos)) 
+```
+
+## Distinguishing recently infected and vaccinated individuals using serological data
+
+```{r}
+
+loocv_df %>%
+        filter(variables=="Reduced IgG Panel")%>%
+        filter(status=="Case")%>%
+        group_by(variables,day,status)%>%
+        summarize(seropos=mean(spec95_seropos)) 
+
+loocv_df %>%
+        filter(variables=="Reduced IgG Panel")%>%
+        filter(status=="Case")%>%
+        filter(day==2)%>%
+        group_by(variables,day,status)%>%
+        summarize(seropos=mean(spec95_seropos)) 
+
+loocv_df %>%
+        filter(variables=="Reduced IgG Panel")%>%
+        filter(status=="Case")%>%
+        filter(day>180)%>%
+        group_by(variables,status)%>%
+        summarize(seropos=mean(spec95_seropos)) 
+
+loocv_df %>%
+        filter(variables=="Reduced IgG Panel")%>%
+        filter(status=="Contact")%>%
+        group_by(variables,status)%>%
+        summarize(seropos=mean(spec95_seropos)) 
+
+loocv_df %>%
+        filter(variables=="Reduced IgG Panel")%>%
+        filter(status=="Vaccinee")%>%
+        group_by(variables,day,status)%>%
+        summarize(seropos=mean(spec95_seropos)) 
+
+
+```
+
+
+```{r}
+
+external_df <- read_rds("data/generated_data/external_df.rds")
+
+
+external_df %>%
+        filter(training_set == "Vax included" | variables=="Reduced IgG Panel") %>%
+        mutate(variables=ifelse(training_set=="No vax included",
+                                "Original",variables
+                                )) %>%
+        group_by(variables,day,cohort)%>%
+        summarize(seropos=mean(spec95_seropos)) %>%
+        filter(variables=="Original")
+
+external_df %>%
+        filter(training_set == "Vax included" | variables=="Reduced IgG Panel") %>%
+        mutate(variables=ifelse(training_set=="No vax included",
+                                "Original",variables
+                                )) %>%
+        filter(day>44) %>%
+        group_by(variables,cohort)%>%
+        summarize(seropos=mean(spec95_seropos)) %>%
+        filter(variables=="Original")
+
+external_df %>%
+        filter(training_set == "Vax included" | variables=="Reduced IgG Panel") %>%
+        mutate(variables=ifelse(training_set=="No vax included",
+                                "Original",variables
+                                )) %>%
+        filter(variables!="Original") %>%
+        group_by(variables,cohort)%>%
+        summarize(seropos=mean(spec95_seropos)) 
+```
+
+
 ### Antibody kinetics of vaccinated volunteers and confirmed cholera cases
 
 
@@ -148,17 +199,22 @@ analysisData$netMFI_data$wide_data %>% filter(status=="Case") %>%
 
 #understand what proportion had arise in O139 OSP antibodies
 
-analysisData$netMFI_data$long_data %>%
-        filter(test_type=="Luminex") %>%
-        filter(antigen=="O139BSA") %>%
-        filter(status=="Vaccinee") %>%
-        group_by(status,age >= 18,isotype,id) %>%
-        summarize(baseline= 10^value[day==0],
-                  peak= 10^max(value),
-                  FC=peak/baseline
-                  ) %>%
-        group_by(status,isotype) %>%
-        summarize(mean(FC>=2) %>% scales::percent(1))
+final_df %>%
+        filter(day<120)%>%
+        filter(status %in% c("Case","Vaccinee")) %>% 
+        group_by(antigen,cohort,isotype,id) %>%
+        summarize(baseline= RAU_value[day==min(day)],
+                  peak= max(RAU_value),
+                  FC=10^(peak-baseline)
+                  ) %>%  
+        group_by(antigen,cohort,isotype) %>%
+        summarize(fc2=mean(FC>=2)) %>%
+        ggplot(aes(y=fc2,x=cohort,fill=cohort)) +
+                geom_col()+
+        facet_grid(isotype~antigen)+
+        theme_bw()
+
+
 
 ```
 
