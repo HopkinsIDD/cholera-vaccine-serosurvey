@@ -134,12 +134,12 @@ fig1_df %>%
                               x=day,
                               col=Vaccinee
                               ),
-                          alpha=0.3
+                          alpha=0.5
                           )+
                 geom_rug(data=true_pos,sides="l",col="red",alpha=0.3)+
                 geom_rug(data=true_neg,sides="r",col="black",alpha=0.3)+
                 facet_grid(isotype~antigen_pretty)+
-                scale_color_manual(values = c("cyan","#003262","#FDB515")
+                scale_color_manual(values = c("lightblue","#003262","#FDB515")
                                    )+
                 scale_x_continuous("Days since first dose",breaks=c(1,30,200,365) ,trans="sqrt")+
         geom_vline(xintercept = 14,lty=2)+
@@ -192,6 +192,23 @@ f2a <- misclassify_df2 %>%
         scale_fill_viridis_d("Days since first dose")+
         scale_color_viridis_d("Days since first dose")+
         facet_wrap(age_group~.)+
+        theme_cowplot()+
+        xlab("Infection Window (Days)")+
+        scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+        geom_hline(yintercept = 0.05,lty=2)+
+        theme(legend.position = "bottom")
+
+misclassify_df2 %>%
+        filter(cohort == "BGD Vaccinee") %>%
+        mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
+        group_by(day,age_group,end_window) %>%
+        summarize(seropos=mean(spec95_seropos))%>%
+        ggplot(aes(fill=factor(day),col=factor(day),
+                   y=seropos,x=factor(as.numeric(end_window))))+
+        geom_col(position = position_dodge2(0.1))+
+        scale_fill_viridis_d("Days since first dose")+
+        scale_color_viridis_d("Days since first dose")+
+        facet_wrap(cohort~.)+
         theme_cowplot()+
         xlab("Infection Window (Days)")+
         scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
