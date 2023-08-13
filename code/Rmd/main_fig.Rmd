@@ -181,49 +181,77 @@ source("code/R/multidimensional-scaling.R")
 misclassify_df2 <- read_rds("data/generated_data/misclassify_df2.rds")
 
 
-f2a <- misclassify_df2 %>%
-        filter(cohort == "BGD Vaccinee") %>%
-        mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
-        group_by(day,age_group,end_window) %>%
-        summarize(seropos=mean(spec95_seropos))%>%
-        ggplot(aes(fill=factor(day),col=factor(day),
-                   y=seropos,x=factor(as.numeric(end_window))))+
-        geom_col(position = position_dodge2(0.1))+
-        scale_fill_viridis_d("Days since first dose")+
-        scale_color_viridis_d("Days since first dose")+
-        facet_wrap(age_group~.)+
-        theme_cowplot()+
-        xlab("Infection Window (Days)")+
-        scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
-        geom_hline(yintercept = 0.05,lty=2)+
-        theme(legend.position = "bottom")
+# f2a <- misclassify_df2 %>%
+#         filter(cohort == "BGD Vaccinee") %>%
+#         mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
+#         group_by(day,age_group,end_window) %>%
+#         summarize(seropos=mean(spec95_seropos))%>%
+#         ggplot(aes(fill=factor(day),col=factor(day),
+#                    y=seropos,x=factor(as.numeric(end_window))))+
+#         geom_col(position = position_dodge2(0.1))+
+#         scale_fill_viridis_d("Days since first dose")+
+#         scale_color_viridis_d("Days since first dose")+
+#         facet_wrap(age_group~.)+
+#         theme_cowplot()+
+#         xlab("Infection Window (Days)")+
+#         scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme(legend.position = "bottom")
+# 
+# misclassify_df2 %>%
+#         group_by(day,end_window,cohort) %>%
+#         summarize(seropos=mean(spec95_seropos))%>%
+#         filter(end_window %in% c("45","120","200","300"))%>%
+#         ggplot(aes(col=factor(end_window),
+#                    y=seropos,x=day))+
+#         geom_line() +
+#         facet_grid(.~cohort,scales="free_x",space="free_x")+
+#         theme_cowplot()+
+#         scale_x_continuous("Infection Window (Days)",breaks=seq(0,365,28))+
+#         scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme(legend.position = "bottom")
 
-misclassify_df2 %>%
-        filter(cohort == "BGD Vaccinee") %>%
-        mutate(age_group=ifelse(age<10,"Bangladeshi <10 years","Bangladeshi 10+ years")) %>%
-        group_by(day,age_group,end_window) %>%
+f2a <- misclassify_df2 %>%
+        group_by(day,end_window,cohort) %>%
         summarize(seropos=mean(spec95_seropos))%>%
-        ggplot(aes(fill=factor(day),col=factor(day),
-                   y=seropos,x=factor(as.numeric(end_window))))+
-        geom_col(position = position_dodge2(0.1))+
-        scale_fill_viridis_d("Days since first dose")+
-        scale_color_viridis_d("Days since first dose")+
-        facet_wrap(cohort~.)+
+        filter(end_window %in% c("45","120","200","300"))%>%
+        mutate(end_window=factor(end_window,
+                                 levels=c("45","120","200","300"),
+                                 labels=c("45-day","120-day","200-day","300-day"))) %>%
+        mutate(Vaccinee=case_when(
+                        cohort=="BGD Vaccinee" ~ "Bangladeshi",
+                        cohort=="HTI Vaccinee" ~ "Haitian"
+        )) %>%
+        ggplot(aes(col=Vaccinee,
+                   y=seropos,x=day))+
+        geom_point(aes(shape=Vaccinee))+
+        geom_line() +
+        facet_grid(.~end_window)+
         theme_cowplot()+
-        xlab("Infection Window (Days)")+
-        scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+        scale_x_continuous("Infection Window (Days)",breaks=seq(0,365,90))+
+        scale_y_continuous("False Positivity Rate")+
+        scale_color_manual(values = c("#003262","#FDB515"))+
+        scale_shape_manual(values=c(1,1))+
         geom_hline(yintercept = 0.05,lty=2)+
-        theme(legend.position = "bottom")
+        theme(legend.position = "none")
 
 
 #get mds measurements
 mds_obj <- read_rds("data/generated_data/mds_obj.rds")
 
 
-f2b <- mds_obj %>%
+f2b <- mds_obj  %>%
+        mutate(cohort=case_when(
+                        cohort=="BGD Vaccinee" ~ "Bangladeshi Vaccinees",
+                        cohort=="HTI Vaccinee" ~ "Haitian Vaccinees",
+                        cohort=="SMIC/PIC" ~ "Bangladeshi Cases",
+
+        ))%>%
                 ggplot(aes(x=D1,y=D2,col=cohort)) +
-                geom_point(alpha=0.5,shape=16)+
-                scale_color_manual("Class", values=c("darkblue","gold","red"))+
+                geom_point(aes(shape=cohort))+
+                scale_color_manual("Cohort", values=c("red","#003262","#FDB515"))+
+                scale_shape_manual("Cohort",values=c(2,1,1))+
                 xlab("Dimension 1")+
                 ylab("Dimension 2")+
         facet_wrap(.~time_window,scales="free")+
