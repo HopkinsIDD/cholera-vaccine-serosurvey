@@ -1,7 +1,6 @@
 
 #extract data from luminex output (.csv) file and put into a list of dataframes
 extractExponentcsv <- function(file,token){
-        
         #read in .CSV
         trial <- drop_read_csv(file,
                                dtoken=token,
