@@ -24,9 +24,9 @@ layout_files <- setdiff(
 batches <- matched_layout %>%
                 filter(file %in% layout_files) %>%
                 filter(data_file %in% data_files) %>%
-                select(batch,data_file,layout_file=file) %>%
-                filter(batch %in% c(
-                         "20220728_p0040"))
+                select(batch,data_file,layout_file=file) 
+
+
 
 #create folders with all of the merged data
 for(i in 1:nrow(batches)){
@@ -60,6 +60,16 @@ for(i in 1:nrow(batches)){
                 ) 
         }
         
+        this_merge <- this_merge %>%
+                mutate(no_control=str_remove(sample,"Control\\: ")) %>%
+                mutate(type=case_when(
+                        str_detect(no_control,"\\:") ~ "Standard",
+                        str_detect(sample,"Control\\: ")&(!str_detect(no_control,"\\:")) ~ "Control",
+                        str_detect(sample,"Blank|Sialidase|Pool|PBS") ~ "Control",
+                        TRUE  ~ "Sample"
+                )) %>%
+                select(-no_control)
+        
         #run the checks
         #do the number of rows match up between the sets
         if(nrow(this_data_extract$out_df)!=nrow(this_layout_extract$out_df) ) {
@@ -77,17 +87,48 @@ for(i in 1:nrow(batches)){
                 stop("Something went wrong with the merge for the above data")
         }
         
-        #save this_merge
-        write_rds(this_merge,glue::glue("{new_dir}/{this_batch$batch}_merge.rds"))
-
+        #identify wells with low bead counts
+        #identify wells that have a high cv
+        #create df that is good enough
+        
+        
+        #save the extracts and merge
+        this_out <- list(
+                data_extract= this_data_extract,
+                layout_extract= this_layout_extract,
+                extract_merge= this_merge
+        )
+        
+        write_rds(this_out,
+                  glue::glue("{new_dir}/{this_batch$batch}_merge.rds"))
+        
+        #run the QA/QC analysis
+        # rmarkdown::render(here::here('code/Rmd/qc_report.Rmd'),
+        #                   knit_root_dir = "../../..",
+        #                   params = list(
+        #                           extract=this_data_extract,
+        #                           layout=this_layout_extract,
+        #                           batch_id = this_batch$batch
+        #                   ),
+        #                   output_file = paste0('../../../figures/qc_reports/plate_report_',this_batch$batch, 
+        #                                        '.html', sep=''))
+        
 }
 
         
-        
+# all_data_names <- all_data %>%
+#                         count(sample) %>%
+#                 mutate(no_control=str_remove(sample,"Control\\: ")) %>%
+#                 mutate(type=case_when(
+#                          str_detect(no_control,"\\:") ~ "Standard",
+#                          str_detect(sample,"Control\\: ")&(!str_detect(no_control,"\\:")) ~ "Control",
+#                          str_detect(sample,"Blank|Sialidase|Pool|PBS") ~ "Control",
+#                          TRUE  ~ "Sample"
+#                 ))
 
         #for each isotype, conduct QA/QC
                 #bead count
-                #coerricient of variation
+                #coefficient of variation
                 #separate troublesome wells
                 #calculate the netMFI
                 #create dilution object and fit model
