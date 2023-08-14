@@ -1,9 +1,26 @@
 
 #extract data from luminex output (.csv) file and put into a list of dataframes
-extractExponentcsv <- function(file,token){
+extractExponentcsv <- function(file){
+        
+        #get the plate location from the luminex output string
+        get_loc <- function(string){
+                loc <- str_split(string,",")
+                loc <- unlist(loc)[2]
+                loc <- str_remove(loc,"\\)")
+                
+                return(loc)
+        }
+        
+        
         #read in .CSV
-        trial <- drop_read_csv(file,
-                               dtoken=token,
+        # trial <- drop_read_csv(file,
+        #                        dtoken=token,
+        #                        header=FALSE,
+        #                        col.names=paste("column", 1:26, sep="_"),
+        #                        colClasses = "character"
+        # )
+        
+        trial <- read.csv(file,
                                header=FALSE,
                                col.names=paste("column", 1:26, sep="_"),
                                colClasses = "character"
@@ -112,44 +129,40 @@ drop_excel_sheets <- function(file, dtoken, dest = tempdir(), ...) {
 
 #extract data from layout file
 
-extractLayout <- function(file,token){
+extractLayout <- function(file){
         
         # find the name
-        sheets <- drop_excel_sheets(file,dtoken=token)
+        sheets <- readxl::excel_sheets(file)
         
         if("version" %in% sheets){
                 #first read in the file to get the version
-                version <- drop_read_excel(file,sheet="version",
-                                           range=c("A1:A2"),
-                                           dtoken = token)
+                version <- readxl::read_excel(file,sheet="version",
+                                           range=c("A1:A2"))
                 
         } else version = "1.0"
         
         
-        if(version=="1.0") out <- extractLayout_v1.0(file=file,token=token)
-        if(version=="1.1") out <- extractLayout_v1.1(file=file,token=token)
+        if(version=="1.0") out <- extractLayout_v1.0(file=file)
+        if(version=="1.1") out <- extractLayout_v1.1(file=file)
         
         return(out)
         
 }
 
-extractLayout_v1.0  <- function(file,token){
-        layout_1 <- drop_read_excel(file,sheet=1,
-                                    range=c("A1:Y17"),
-                                    dtoken = token) 
+extractLayout_v1.0  <- function(file){
+        layout_1 <- readxl::read_excel(file,sheet=1,
+                                    range=c("A1:Y17")) 
         
         colnames(layout_1)[1] <-"Letter"
         
-        description_df <- drop_read_excel(file,sheet=2,
+        description_df <- readxl::read_excel(file,sheet=2,
                                           col_types="text",range=c("A2:B4"),
-                                          col_names=FALSE,
-                                          dtoken = token) 
+                                          col_names=FALSE) 
         
         # need to account for semicolons eventually
-        antibody_df <- drop_read_excel(file,sheet=2,
+        antibody_df <- readxl::read_excel(file,sheet=2,
                                        range=c("A7:C16"),
-                                       col_names=TRUE,
-                                       dtoken = token) %>%
+                                       col_names=TRUE) %>%
                 filter(!is.na(wells)) %>%
                 mutate(min=sapply(wells,
                                   FUN= function(x) str_split_fixed(x,"\\:",n=2)[1]))%>%
@@ -180,11 +193,10 @@ extractLayout_v1.0  <- function(file,token){
         }
         
         
-        antigen_df <- drop_read_excel(file,sheet=2,
+        antigen_df <- readxl::read_excel(file,sheet=2,
                                       range=c("A19:D110"),
                                       col_names=TRUE,
-                                      col_types=c("text","date","text","text"),
-                                      dtoken = token) %>%
+                                      col_types=c("text","date","text","text")) %>%
                 filter(!is.na(antigen))%>%
                 mutate(coupling_date=as.Date(coupling_date)) %>%
                 filter(!is.na(wells)) %>%
@@ -245,24 +257,21 @@ extractLayout_v1.0  <- function(file,token){
 
 
 extractLayout_v1.1 <- function(file,token){
-        layout_1 <- drop_read_excel(file,sheet=1,
-                                    range=c("A1:Y17"),
-                                    dtoken = token) 
+        layout_1 <- readxl::read_excel(file,sheet=1,
+                                    range=c("A1:Y17")) 
         
         colnames(layout_1)[1] <-"Letter"
         
         
-        description_df <- drop_read_excel(file,sheet=2,
+        description_df <- readxl::read_excel(file,sheet=2,
                                           col_types="text",range=c("A2:D4"),
-                                          col_names=FALSE,
-                                          dtoken = token) 
+                                          col_names=FALSE) 
         
         
         # need to account for semicolons eventually
-        antibody_df <- drop_read_excel(file,sheet=2,
+        antibody_df <- readxl::read_excel(file,sheet=2,
                                        range=c("A7:D16"),
-                                       col_names=TRUE,
-                                       dtoken = token) %>%
+                                       col_names=TRUE) %>%
                 filter(!is.na(wells)) %>%
                 mutate(min=sapply(wells,
                                   FUN= function(x) str_split_fixed(x,"\\:",n=2)[1]))%>%
@@ -293,11 +302,11 @@ extractLayout_v1.1 <- function(file,token){
         
         
         
-        antigen_df <- drop_read_excel(file,sheet=2,
+        antigen_df <- readxl::read_excel(file,sheet=2,
                                       range=c("A19:E110"),
                                       col_names=TRUE,
-                                      col_types=c("text","text","date","text","text"),
-                                      dtoken = token) %>%
+                                      col_types=c("text","text","date","text","text")
+                                      ) %>%
                 filter(!is.na(antigen_name))%>%
                 mutate(coupling_date=as.Date(coupling_date)) %>%
                 filter(!is.na(wells)) %>%
@@ -358,57 +367,6 @@ extractLayout_v1.1 <- function(file,token){
 }
 
 
-
-combineExtraction<-function(batch_id,register,token){
-        
-        #find the row with the batch id
-        this_batch <- filter(register,batch==batch_id)
-        
-        #set paths of where csv and layouts are
-        csv_path <- "vc_luminex_longtudinal/raw_plate_data/final/summaryFI/"
-        layout_path <-"vc_luminex_longtudinal/layout_lookup/layouts/new_layouts/"
-        csv_file  <-paste0(csv_path,this_batch$data_file %>% unlist())
-        xlsx_file <-paste0(layout_path,this_batch$file%>% unlist())
-        
-        
-        #extract the data AND merge
-        csv <- extractExponentcsv(csv_file,token)
-        layout <- extractLayout(xlsx_file,token)
-        
-        if (layout$summary$version=="1.0"){
-                final <- left_join(csv$out_df,layout$out_df,
-                                   by = c("location", "batch")
-                                   ) 
-        }
-        if (layout$summary$version!="1.0"){
-                final <- left_join(csv$out_df,layout$out_df,
-                                   by = c("location", "batch", "BeadID")
-                                   ) 
-        }
-        
-        #run the checks
-        #do the number of rows match up between the sets
-        if(nrow(csv$out_df)!=nrow(layout$out_df) ) {
-                if(nrow(csv$out_df)!=nrow(layout$out_df)*length(unique(layout$summary$antigen$antigen_name))){
-                        stop(paste0(csv$batch,":Layout rows (",nrow(layout$out_df),") doesnt match .csv rows (",nrow(csv$out_df),")"))
-                }}
-        
-        #does every sample have 
-        # sample id
-        # batch id
-        # bead count
-        # isotype
-        
-        if(select(final,batch,Count,sample,isotype) %>% is.na() %>% any()){
-                final %>% filter(is.na(batch)|is.na(Count)|is.na(sample)|is.na(isotype)) %>%
-                        select(batch,location,sample_exponent,Count,sample,isotype)
-                stop("Something went wrong with the merge for the above data")
-        }
-        
-        return(final)
-        
-        
-}
 
 
 fitLL_model <- function(data, title="") {
