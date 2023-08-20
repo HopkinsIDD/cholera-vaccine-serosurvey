@@ -107,12 +107,70 @@ for(i in 1:nrow(batches)){
 #match directory path
 match_dir_path <- "data/generated_data/quality_control/"
 
+
+
+
+#calculate the averages and fit standard curves 
+standards_curves <- list()
+
+#for(i in 1:nrow(batches)){
+
+        this_batch<- batches$batch[81]
+        this_merge <- glue::glue("{match_dir_path}{this_batch}/{this_batch}_merge.rds") %>%
+                read_rds()
+        
+        # first calculate average and remove points of low quality
+        # save them in each folder
+        # these_averageMFI <- 
+        
+        these_isotypes <- unique(this_merge$extract_merge$isotype)
+        this_standards_obj <- list()
+        
+        for(iso in these_isotypes){
+                this_standard_df <- this_merge$extract_merge %>%
+                        filter(isotype==iso) %>%
+                        filter(type=="Standard") %>%
+                        mutate(dilution=str_extract(sample,"1:[0-9]{1,7}")) %>%
+                        mutate(dilution=str_remove(dilution,"1:"))%>%
+                        mutate(dilution=as.numeric(dilution))
+                
+                #estimate the standard curve
+                # this_fit 
+                
+                # in "code/R/qc_files/utils_qc.R", 
+                #fitLL_model , get3PLL_RAU, get5PLL_RAU
+                #original: look up FreqFit and Bayes fit
+
+                
+                #save to the
+                # this_standards_obj[[iso]] <- list(
+                #         data=this_standard_df,
+                #         fit=this_fit
+                # )
+                
+        }
+        
+        #save in folder
+        # write_rds(this_standards_obj,
+        #           glue::glue('{match_dir_path}{this_batch}/{this_batch}_standards.rds'))
+        
+        #save curve objects in one place
+        #standards_curves[[this_batch]] <- this_standards_obj
+
+#}
+
+
+
+
 #run qc report
 #for(i in 1:nrow(batches)){
         
         this_batch<- batches$batch[1]
         this_merge <- glue::glue("{match_dir_path}{this_batch}/{this_batch}_merge.rds") %>%
                 read_rds()
+        
+        ##do this for every isotype
+        
         
         #run the QA/QC analysis
         rmarkdown::render(here::here('code/Rmd/qc_report.Rmd'),
@@ -121,7 +179,7 @@ match_dir_path <- "data/generated_data/quality_control/"
                                   batch_id = this_batch,
                                   merge_obj = this_merge
                           ),
-                          output_file = here::here(glue::glue('data/generated_data/quality_control/{this_batch}/{this_batch}_qc_report.html')
+                          output_file = here::here(glue::glue('{match_dir_path}{this_batch}/{this_batch}_qc_report.html')
                           ))
 #}
         
