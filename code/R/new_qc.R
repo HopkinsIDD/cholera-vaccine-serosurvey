@@ -102,20 +102,33 @@ for(i in 1:nrow(batches)){
         write_rds(this_out,
                   glue::glue("{new_dir}/{this_batch$batch}_merge.rds"))
         
-        #run the QA/QC analysis
-        # rmarkdown::render(here::here('code/Rmd/qc_report.Rmd'),
-        #                   knit_root_dir = "../../..",
-        #                   params = list(
-        #                           extract=this_data_extract,
-        #                           layout=this_layout_extract,
-        #                           batch_id = this_batch$batch
-        #                   ),
-        #                   output_file = paste0('../../../figures/qc_reports/plate_report_',this_batch$batch, 
-        #                                        '.html', sep=''))
-        
 }
 
+#match directory path
+match_dir_path <- "data/generated_data/quality_control/"
+
+#run qc report
+#for(i in 1:nrow(batches)){
         
+        this_batch<- batches$batch[1]
+        this_merge <- glue::glue("{match_dir_path}{this_batch}/{this_batch}_merge.rds") %>%
+                read_rds()
+        
+        #run the QA/QC analysis
+        rmarkdown::render(here::here('code/Rmd/qc_report.Rmd'),
+                          knit_root_dir = here::here(),
+                          params = list(
+                                  batch_id = this_batch,
+                                  merge_obj = this_merge
+                          ),
+                          output_file = here::here(glue::glue('data/generated_data/quality_control/{this_batch}/{this_batch}_qc_report.html')
+                          ))
+#}
+        
+
+
+
+
 # all_data_names <- all_data %>%
 #                         count(sample) %>%
 #                 mutate(no_control=str_remove(sample,"Control\\: ")) %>%

@@ -6,25 +6,32 @@ output:
         toc_float: true
 params:
   batch_id: batch_id 
+  merge_obj: merge_obj
 title: "Quality Control for `r params$batch_id`"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE,message=FALSE,warning=FALSE,
+knitr::opts_chunk$set(echo = FALSE,message=FALSE,warning=FALSE, eval = FALSE,
                       fig.width = 10, fig.height = 8)
+
+pacman::p_load(
+        tidyverse,
+        downloadthis
+)
+
 ```
 
 ## Overview
 
-- Plate ID: `r extract$batch` 
-- Date of Run: `r extract$date`
-- Technician Name: `r if(version=="1.1") description_df[1,4]`
-- Plate Notes: `r description_df[3,2] %>% as.character()`
+- Plate ID: `r params$batch_id` 
+- Date of Run: `r params$merge_obj$layout_extract$summary$description[2,2]`
+- Technician Name: `r if(params$merge_obj$layout_extract$summary$version=="1.1") params$merge_obj$layout_extract$summary$description[1,4]`
+- Plate Notes: `r params$merge_obj$layout_extract$summary$description[3,2]`
 
 Isotype:
 
-```{r}
-antibody_df %>%
+```{r eval=TRUE}
+params$merge_obj$layout_extract$summary$antibody %>%
   select(isotype,subclass,wells) %>%
   flextable::flextable() %>%
   flextable::autofit()
@@ -33,33 +40,24 @@ antibody_df %>%
 
 Antigen:
 
-```{r}
+```{r eval=TRUE}
 
-if(version=="1.0"){
+if(params$merge_obj$layout_extract$summary$version=="1.0"){
         
-        beadID_df %>%
-                  rename(antigen_name=antigen)%>%
-                  full_join(antigen_df) %>% 
-                  select(antigen=antigen_name,BeadID,coupling_date,lot_number,wells) %>%
-                  group_by(antigen, BeadID, coupling_date,lot_number) %>%
-                  summarize(wells=paste(wells,collapse="; ")) %>%
+        params$merge_obj$layout_extract$summary$antigen %>%
+                select(antigen_name,coupling_date,lot_number,wells)%>%
                   flextable::flextable() %>%
                   flextable::autofit()
                         
-        
 }
 
 
-if(version=="1.1"){
+if(params$merge_obj$layout_extract$summary$version=="1.1"){
         
-        beadID_df %>%
-                  full_join(antigen_df) %>% 
-                  select(antigen,BeadID,coupling_date,lot_number,wells) %>%
-                  group_by(antigen, BeadID, coupling_date,lot_number) %>%
-                  summarize(wells=paste(wells,collapse="; ")) %>%
+        params$merge_obj$layout_extract$summary$antigen %>%
+                select(antigen_name,BeadID,coupling_date,lot_number,wells)%>%
                   flextable::flextable() %>%
                   flextable::autofit()
-                        
         
 }
 
@@ -70,13 +68,19 @@ if(version=="1.1"){
 
 ### Heatmap
 
-```{r}
+```{r eval=TRUE}
+full_data <- params$merge_obj$extract_merge %>%
+                mutate(location_number=str_extract(location,"[0-9]{1,2}"),
+                       location_letter=str_extract(location,"[A-Z]{1,2}")
+                       ) %>%
+                mutate(location_number=as.numeric(location_number))
+
 
 full_data %>%
   full_join(expand_grid(location_letter=LETTERS[1:16],
-                        antigen=unique(full_data$antigen)
+                        antigen_exponent=unique(full_data$antigen_exponent)
   )) %>%
-  filter(!is.na(Sample))%>% 
+  filter(!is.na(sample))%>% 
   ggplot(aes(x=location_number,
              y=location_letter),
   )+
@@ -89,7 +93,7 @@ full_data %>%
                        
   )+
   theme_bw()+
-  facet_wrap(.~antigen)+
+  facet_wrap(.~antigen_exponent)+
   scale_x_continuous("Number",limits=c(0,24),breaks = c(6,12,18,24))+
   scale_y_discrete("Letter",limits=LETTERS[1:16] %>% rev())
 
@@ -100,10 +104,10 @@ full_data %>%
 
 ### Antigen-wells with low counts
 
-```{r}
+```{r eval=TRUE}
 
-tab1 <- extract$Count %>% filter(Count<50) %>%  
-  group_by(Sample,location) %>%
+tab1 <- full_data %>% filter(Count<50) %>%  
+  group_by(sample,location) %>%
   summarize(`<50 Beads occurrences`=n(),
             `<30 Beads occurrences`=sum(Count<30),
             `0 Beads occurrences`=sum(Count==0)
@@ -114,7 +118,7 @@ tab1 %>%
   DT::datatable()
 
 tab1 %>% download_this(
-  output_name = paste0("low_bead_counts_",batch_id),
+  output_name = paste0("low_bead_counts_",params$batch_id),
   output_extension = ".xlsx",
   button_label = "Download as xlsx",
   button_type = "warning",
@@ -131,7 +135,7 @@ After removing all measurements with fewer than 30 beads, some samples will not 
 
 ```{r}
 tab2 <- full_data %>% 
-  group_by(Sample,antigen) %>%
+  group_by(sample,antigen_exponent) %>%
   summarize(`# of observations with 30+ Beads`=sum(Count>30)) %>%
   filter(`# of observations with 30+ Beads`<=1)
 
