@@ -87,10 +87,6 @@ for(i in 1:nrow(batches)){
                 stop("Something went wrong with the merge for the above data")
         }
         
-        #identify wells with low bead counts
-        #identify wells that have a high cv
-        #create df that is good enough
-        
         
         #save the extracts and merge
         this_out <- list(
@@ -107,60 +103,192 @@ for(i in 1:nrow(batches)){
 #match directory path
 match_dir_path <- "data/generated_data/quality_control/"
 
-
-
-
-#calculate the averages and fit standard curves 
+#calculate the averages and fit standard curves for each batch
 standards_curves <- list()
+control_data <- data.frame() 
+sample_data <- data.frame()
 
-#for(i in 1:nrow(batches)){
 
-        this_batch<- batches$batch[81]
+for(i in 1:nrow(batches)){
+        cat(batches$batch[i],"\n")
+
+        this_batch<- batches$batch[i]
         this_merge <- glue::glue("{match_dir_path}{this_batch}/{this_batch}_merge.rds") %>%
                 read_rds()
+        multiple_beadlots <- this_merge$layout_extract$summary$antigen %>%
+                                distinct(antigen_name,lot_number) %>%
+                                count(antigen_name) %>%
+                                pull(n) %>% max()
         
-        # first calculate average and remove points of low quality
-        # save them in each folder
-        # these_averageMFI <- 
+        if(multiple_beadlots>1) warning("multiple bead lots, qc not done")
+        if(matched_layout$type[i]=="experiment") warning("experimental data, qc not done")
         
-        these_isotypes <- unique(this_merge$extract_merge$isotype)
-        this_standards_obj <- list()
-        
-        for(iso in these_isotypes){
-                this_standard_df <- this_merge$extract_merge %>%
-                        filter(isotype==iso) %>%
-                        filter(type=="Standard") %>%
-                        mutate(dilution=str_extract(sample,"1:[0-9]{1,7}")) %>%
-                        mutate(dilution=str_remove(dilution,"1:"))%>%
-                        mutate(dilution=as.numeric(dilution))
+        if(matched_layout$type[i]!="experiment" & multiple_beadlots==1){
+                # first identify points with low quality
+                count_threshold <- 30
+                low_beads_location <- filter(this_merge$extract_merge, Count<count_threshold) %>%
+                        filter(!str_detect(sample,"Blank")) %>%
+                        distinct(location)
                 
-                #estimate the standard curve
-                # this_fit 
+                cv_threshold <- 0.2
+                high_cv_location <- filter(this_merge$extract_merge, Count>=count_threshold) %>%
+                        #work on the log scale
+                        mutate(MFI=log10(MFI))%>%
+                        #calculate the average MFI and CV
+                        group_by(batch,sample,isotype,antigen_exponent) %>%
+                        mutate( replicates=n(),  
+                                avgMFI=mean(MFI),
+                                sdMFI=sd(MFI)
+                        ) %>%
+                        mutate(cvMFI=sdMFI/avgMFI,
+                               diff_avg=MFI-avgMFI
+                        )  %>%
+                        filter(cvMFI> cv_threshold ) %>%
+                        slice_max(diff_avg,n=1,
+                                  with_ties = FALSE
+                        ) %>%
+                        ungroup()%>%
+                        #dont include the blank in here to allow net mfi calculation
+                        filter(!str_detect(sample,"Blank")) %>%
+                        distinct(location)
                 
-                # in "code/R/qc_files/utils_qc.R", 
-                #fitLL_model , get3PLL_RAU, get5PLL_RAU
-                #original: look up FreqFit and Bayes fit
-
+                # remove these locations
+                these_averageMFI <- this_merge$extract_merge %>%
+                        #work on the log scale
+                        mutate(MFI=log10(MFI))%>%
+                        #remove the locations with low beads and high cv
+                        anti_join(low_beads_location,by="location") %>%
+                        anti_join(high_cv_location,by="location")%>%
+                        group_by(batch,type,sample,isotype,antigen_exponent) %>%
+                        summarize( replicates=n(),  
+                                   avgMFI=mean(MFI),
+                                   sdMFI=sd(MFI)
+                        ) %>%
+                        mutate(cvMFI=sdMFI/avgMFI,
+                        ) %>%
+                        #only include those with more than 1 replicate
+                        filter(replicates>1) %>%
+                        ungroup()
                 
-                #save to the
-                # this_standards_obj[[iso]] <- list(
-                #         data=this_standard_df,
-                #         fit=this_fit
-                # )
+                
+                # save them in each folder
+                fits_obj <- list()
+                control_df <- data.frame()
+                sample_df <- data.frame()
+                standard_df <- data.frame()
+                
+                #identify the isotypes in data
+                these_isotypes <- unique(these_averageMFI$isotype)
+                for(iso in these_isotypes){
+                        
+                        #identify the blanks
+                        this_blank_df <- these_averageMFI %>%
+                                filter(isotype==iso) %>%
+                                filter(type=="Control") %>%
+                                filter(str_detect(sample,"Blank")) %>%
+                                select(sample,antigen_exponent,blank=avgMFI)
+                        
+                        #calculate the netmfi
+                        this_netmfi <- these_averageMFI %>%
+                                filter(isotype==iso) %>%
+                                anti_join(this_blank_df,by = c("sample", "antigen_exponent")) %>%
+                                left_join(select(this_blank_df,-sample),by="antigen_exponent") %>%
+                                mutate(netmfi_value=avgMFI-blank) %>%
+                                mutate(netmfi_value=ifelse(netmfi_value<=0,0,netmfi_value))
+                        
+                        
+                        #identify the samples from the standard curve
+                        this_standard_df <- this_netmfi %>%
+                                filter(type=="Standard") %>%
+                                mutate(dilution=str_remove(sample,"\\,"))%>%
+                                mutate(dilution=str_extract(dilution,"1:[0-9]{1,7}")) %>%
+                                mutate(dilution=str_remove(dilution,"1:"))%>%
+                                mutate(dilution=as.numeric(dilution)) 
+                        
+                        #store the standard data.frame
+                        standard_df <- bind_rows(standard_df,this_standard_df)
+                        
+                        #estimate the standard curves
+                        antigens <- unique(this_standard_df$antigen_exponent)
+                        for(anti in antigens){
+                                #fit the standard curve
+                                this_fit <- this_standard_df %>%
+                                        filter(antigen_exponent==anti) %>%
+                                        fitLL_model()
+                                
+                                
+                                if(this_fit$model_type=="Net MFI, 3P-log-logistic"){
+                                        this_rau_df <- this_netmfi %>%
+                                                filter(antigen_exponent==anti) %>%
+                                                filter(type %in% c("Control","Sample"))%>%
+                                                mutate(RAU_value=sapply(netmfi_value, FUN=get3PLL_RAU,fit=this_fit$fit))
+                                        
+                                }
+                                
+                                if(this_fit$model_type=="MFI, 5P-log-logistic"){
+                                        this_rau_df <- this_netmfi %>%
+                                                filter(antigen_exponent==anti) %>%
+                                                filter(type %in% c("Control","Sample"))%>%
+                                                mutate(RAU_value=sapply(avgMFI, FUN=get5PLL_RAU,fit=this_fit$fit))
+                                }
+                                # fit to standard curve
+                                fits_obj[[iso]][[anti]] <- this_fit
+                                # store the RAU of samples
+                                if(this_fit$model_type!="Error"){
+                                        control_df <- bind_rows(control_df,filter(this_rau_df,type=="Control"))
+                                        sample_df <- bind_rows(sample_df,filter(this_rau_df,type=="Sample"))
+                                }
+                                
+                        }
+                        
+                }
+                
+                #save individual objects in folder
+                write_rds(fits_obj, glue::glue('{match_dir_path}{this_batch}/{this_batch}_fits.rds'))
+                write_rds(standard_df, glue::glue('{match_dir_path}{this_batch}/{this_batch}_standards.rds'))
+                write_rds(control_df, glue::glue('{match_dir_path}{this_batch}/{this_batch}_RAU_controls.rds'))
+                write_rds(sample_df, glue::glue('{match_dir_path}{this_batch}/{this_batch}_RAU_sample.rds'))
+                
+                #save curve objects in one place
+                standards_curves[[this_batch]] <- fits_obj
+                write_rds(standards_curves, glue::glue('{match_dir_path}standards_curves.rds'))
+                
+                #save controls data in one place
+                if(nrow(control_df)>0) control_data <- bind_rows(control_data,control_df)
+                write_rds(control_data, glue::glue('{match_dir_path}control_data.rds'))
+                
+                #save samples data in one place
+                if(nrow(sample_df)>0) sample_data <- bind_rows(sample_data,sample_df)
+                write_rds(sample_data, glue::glue('{match_dir_path}sample_data.rds'))
+                
                 
         }
-        
-        #save in folder
-        # write_rds(this_standards_obj,
-        #           glue::glue('{match_dir_path}{this_batch}/{this_batch}_standards.rds'))
-        
-        #save curve objects in one place
-        #standards_curves[[this_batch]] <- this_standards_obj
-
-#}
+}
 
 
 
+
+
+
+funk <- function(y) {
+        bind_rows(lapply(y,function(x) x$model_type)) %>%
+                gather(antigen,model_type)
+} 
+
+bind_rows(lapply(standards_curves,
+                 function(z) bind_rows(lapply(z, FUN=funk),.id = "isotype")),.id="batch") %>%
+        View()
+
+
+
+filter(sample_data, batch=="20220309_p0025")
+
+this_merge <- glue::glue("{match_dir_path}20220309_p0025/20220309_p0025_merge.rds") %>%
+        read_rds()
+
+this_merge$extract_merge %>% View()
+
+# lapply(standards_curves, FUN=function())
 
 #run qc report
 #for(i in 1:nrow(batches)){
@@ -183,7 +311,6 @@ standards_curves <- list()
                           ))
 #}
         
-
 
 
 

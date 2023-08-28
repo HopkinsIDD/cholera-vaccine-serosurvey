@@ -366,30 +366,24 @@ extractLayout_v1.1 <- function(file,token){
         
 }
 
-
-
-
-fitLL_model <- function(data, title="") {
+fitLL_model <- function(data) {
         
-        if(length(unique(data$dilution))<=5){
+        #check on 
+        missing_blank<- any(is.na(data$blank))
+        available_dilutions<- length(unique(data$dilution))
+        
+        if(!missing_blank & available_dilutions<=5 &available_dilutions>3){
                 
-                # data <- data %>% mutate(netmfi_value=log10(netmfi_value))
                 #consider adding weights or log transforming
                 fit <-  drc::drm(
                         formula=netmfi_value~dilution,
                         data=data,
                         fct=drc::LL.4(
-                                fixed = c(NA, 10, NA, NA), 
+                                fixed = c(NA, 0, NA, NA), 
                                 names = c("b", "c", "d", "e")))
                 
                 
                 model_type="Net MFI, 3P-log-logistic"
-                
-                
-                #get the R^2 value
-                # avg <- mean(data$netmfi_value)
-                # preds <- fit$predres[,1]
-                # R.squared <- sum((preds-avg)^2)/sum((data$netmfi_value-avg)^2)
                 
                 avg <- mean(data$netmfi_value)
                 residuals <- fit$predres[,2]
@@ -398,49 +392,45 @@ fitLL_model <- function(data, title="") {
                 
                 if(R.squared>1) warning("R-squared over 1")
                 
-        } else {
-                # data <- data %>% mutate(MFI=log10(MFI))
-                
+                out <- list( data=data,
+                             fit=fit,
+                             model_type=model_type,
+                             R.squared = R.squared
+                )
+        } 
+        if(available_dilutions>5){
                 
                 #consider adding weights or log transforming
-                fit <-  drc::drm(MFI~dilution,
+                fit <-  drc::drm(avgMFI~dilution,
                                  data=data,
                                  fct=drc::LL.5())
                 model_type="MFI, 5P-log-logistic"
                 
-                #get the R^2 value
-                # avg <- mean(data$MFI)
-                # preds <- fit$predres[,1]
-                # R.squared <- sum((preds-avg)^2)/sum((data$MFI-avg)^2)
-                
-                avg <- mean(data$MFI)
+                avg <- mean(data$avgMFI)
                 residuals <- fit$predres[,2]
-                R.squared <- 1-sum(residuals^2)/sum((data$MFI-avg)^2)
+                R.squared <- 1-sum(residuals^2)/sum((data$avgMFI-avg)^2)
                 
                 
                 if(R.squared>1) warning("R-squared over 1")
                 
+                out <- list( data=data,
+                             fit=fit,
+                             model_type=model_type,
+                             R.squared = R.squared
+                )
                 
         }
         
-        #plot the curve
-        # plot(fit,type="all")
-        # title(combo_df[r,] %>% unlist %>% paste(collapse=" "))
-        # text(x=500, y=150,col="red",
-        #      labels=paste("R^2: ",round(R.squared,2))
-        # )
-        # 
         
+        if(!(!missing_blank & available_dilutions<=5 &available_dilutions>3) & !(available_dilutions>5)){
+                
+                out <- list(model_type="Error",
+                            missing_blank=missing_blank,
+                            available_dilutions=available_dilutions
+                            )
+        }
+                
         
-        
-        
-        out <- list( data=data,
-                     fit=fit,
-                     model_type=model_type,
-                     R.squared = R.squared#,
-                     # plot=recordPlot()
-                     
-        )
         
         return(out)
         
@@ -448,33 +438,40 @@ fitLL_model <- function(data, title="") {
 
 
 # new  RAU function
-get3PLL_RAU<- function(value,value_range,dilution_range,fit,lb=10){
+get3PLL_RAU<- function(value,fit, max_dilution=10^5,min_dilution=10^2){
         
-        if(value>=max(value_range)) RAU <- min(dilution_range)
-        if(value<=min(value_range)) RAU <- max(dilution_range)
         
-        if(value <max(value_range) & value > min(value_range)){
+        max_value<- predict(this_fit$fit,newdata = data.frame(dilution=min_dilution))
+        min_value<- predict(this_fit$fit,newdata = data.frame(dilution=max_dilution))
+        
+
+        if(value>=max_value) RAU <- min_dilution
+        if(value<=min_value) RAU <- max_dilution
+
+        if(value <max_value& value > min_value){
                 B <- fit$coefficients[1]
-                C <- lb
+                C <- 0
                 D <- fit$coefficients[2]
                 E <- fit$coefficients[3]
-                
-                RAU <- exp(log((D-C)/(value - C) -1)/B +log(E))
+
+                RAU <- exp(log((D-C)/(value - C) -1)/B +log(E)) %>%
+                        as.numeric()
+
         }
         
         return(RAU)
         
 }
 
-get5PLL_RAU<- function(value,fit){
+get5PLL_RAU<- function(value,fit, max_dilution=10^5,min_dilution=10^2){
         
-        value_range <- fit$data$MFI
-        dilution_range <- fit$data$dilution
+        max_value<- predict(this_fit$fit,newdata = data.frame(dilution=min_dilution))
+        min_value<- predict(this_fit$fit,newdata = data.frame(dilution=max_dilution))
         
-        if(value>=max(value_range)) RAU <- min(dilution_range)
-        if(value<=min(value_range)) RAU <- max(dilution_range)
+        if(value>=max_value) RAU <- min_dilution
+        if(value<=min_value) RAU <- max_dilution
         
-        if(value <max(value_range) & value > min(value_range)){
+        if(value <max_value & value > min_value){
                 B <- fit$coefficients[1]
                 C <- fit$coefficients[2]
                 D <- fit$coefficients[3]
@@ -489,4 +486,53 @@ get5PLL_RAU<- function(value,fit){
         return(RAU)
         
 }
+
+
+# # new  RAU function
+# get3PLL_RAU<- function(value,fit, max_dilution=10^5){
+# 
+#         value_range <- fit$data$netmfi_value
+#         dilution_range <- fit$data$dilution
+#         
+#         min_value<- predict(this_fit$fit,newdata = data.frame(dilution=max_dilution))
+#         
+#         if(value>=max(value_range)) RAU <- min(dilution_range)
+#         if(value<=min_value) RAU <- max_dilution
+#         
+#         if(value <max(value_range) & value > min_value){
+#                 B <- fit$coefficients[1]
+#                 C <- 0
+#                 D <- fit$coefficients[2]
+#                 E <- fit$coefficients[3]
+#                 
+#                 RAU <- exp(log((D-C)/(value - C) -1)/B +log(E))
+#         }
+#         
+#         return(RAU)
+#         
+# }
+# 
+# get5PLL_RAU<- function(value,fit){
+#         
+#         value_range <- fit$data$MFI
+#         dilution_range <- fit$data$dilution
+#         
+#         if(value>=max(value_range)) RAU <- min(dilution_range)
+#         if(value<=min(value_range)) RAU <- max(dilution_range)
+#         
+#         if(value <max(value_range) & value > min(value_range)){
+#                 B <- fit$coefficients[1]
+#                 C <- fit$coefficients[2]
+#                 D <- fit$coefficients[3]
+#                 E <- fit$coefficients[4]
+#                 F_param <- fit$coefficients[5]
+#                 
+#                 Q <- (D-C)/(value - C)
+#                 
+#                 RAU <- exp(log(Q^(1/F_param)-1)/B +log(E))
+#         }
+#         
+#         return(RAU)
+#         
+# }
 
