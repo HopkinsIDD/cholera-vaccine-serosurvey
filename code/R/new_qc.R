@@ -267,49 +267,88 @@ for(i in 1:nrow(batches)){
 
 
 
+#takes in a antigen object from standard curves and gives a data.frame
+pred_curve <- function(standard_antigen,
+                       pred_diluctions= 10^(seq(0.1,7,0.1))
+                       ) {
 
+                
+                predicted_value <- predict(
+                        standard_antigen$fit,
+                        newdata = data.frame(dilution=pred_diluctions)
+                )
+                
+                data.frame(prediction=predicted_value,
+                           dilution=pred_diluctions) %>%
+                        mutate(model_type=standard_antigen$model_type)
+        }
 
-
-funk <- function(y) {
-        bind_rows(lapply(y,function(x) x$model_type)) %>%
-                gather(antigen,model_type)
+bind_lapply <-function(your_list,
+                       your_function,
+                       your_id){
+        lapply(your_list,FUN = your_function) %>%
+                bind_rows(.id=your_id)
 } 
 
-bind_rows(lapply(standards_curves,
-                 function(z) bind_rows(lapply(z, FUN=funk),.id = "isotype")),.id="batch") %>%
-        View()
+standards_curves<- read_rds(glue::glue('{match_dir_path}standards_curves.rds'))
+
+
+#predicted curves to plot against
+predicted_curves <- bind_lapply(your_list=standards_curves, your_id="batch",
+            your_function=function(x) bind_lapply(x,your_id="isotype",
+                        your_function = function(y) bind_lapply(y, your_id="antigen",
+                            your_function = pred_curve
+                    ))) %>%
+                mutate(subclass=case_when(
+                        str_detect(batch,"IGA_1") ~ "1",
+                        str_detect(batch,"IGA_2") ~ "2",
+                        str_detect(batch,"IGG_1") ~ "1",
+                        str_detect(batch,"IGG_2") ~ "2",
+                        str_detect(batch,"IGG_3") ~ "3",
+                        str_detect(batch,"IGG_4") ~ "4",
+                        TRUE ~ "total"
+                        ) )
+                        
+
+filter(predicted_curves,antigen=="Ogawa OSP:BSA",isotype=="IgA") %>%
+        filter(subclass=="total")%>%
+        ggplot(aes(x=dilution,y=prediction))+
+        geom_line(aes(group=batch,col=model_type),alpha=0.5)+
+        scale_x_continuous(trans = "log10")
 
 
 
-filter(sample_data, batch=="20220309_p0025")
+sample_data <- read_rds(glue::glue('{match_dir_path}sample_data.rds'))
 
-this_merge <- glue::glue("{match_dir_path}20220309_p0025/20220309_p0025_merge.rds") %>%
-        read_rds()
-
-this_merge$extract_merge %>% View()
-
-# lapply(standards_curves, FUN=function())
 
 #run qc report
-#for(i in 1:nrow(batches)){
+for(i in 1:nrow(batches)){
         
-        this_batch<- batches$batch[1]
+        this_batch<- batches$batch[i]
         this_merge <- glue::glue("{match_dir_path}{this_batch}/{this_batch}_merge.rds") %>%
                 read_rds()
         
         ##do this for every isotype
+        #identify the isotypes in data
+        these_isotypes <- unique(this_merge$extract_merge$isotype)
+        for(this_iso in these_isotypes){
+                
+                #run the QA/QC analysis
+                rmarkdown::render(here::here('code/Rmd/qc_report.Rmd'),
+                                  knit_root_dir = here::here(),
+                                  params = list(
+                                          batch_id = this_batch,
+                                          merge_obj = this_merge,
+                                          iso=this_iso
+                                  ),
+                                  output_file = here::here(glue::glue('{match_dir_path}{this_batch}/{this_batch}_{this_iso}_qc_report.html')
+                                  ))
+                
+                
+        }
         
         
-        #run the QA/QC analysis
-        rmarkdown::render(here::here('code/Rmd/qc_report.Rmd'),
-                          knit_root_dir = here::here(),
-                          params = list(
-                                  batch_id = this_batch,
-                                  merge_obj = this_merge
-                          ),
-                          output_file = here::here(glue::glue('{match_dir_path}{this_batch}/{this_batch}_qc_report.html')
-                          ))
-#}
+}
         
 
 
