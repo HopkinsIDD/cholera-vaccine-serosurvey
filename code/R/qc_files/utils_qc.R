@@ -374,20 +374,22 @@ fitLL_model <- function(data) {
         
         if(!missing_blank & available_dilutions<=5 &available_dilutions>3){
                 
+                blank_value <- unique(data$blank)
+                
                 #consider adding weights or log transforming
                 fit <-  drc::drm(
-                        formula=netmfi_value~dilution,
+                        formula=avgMFI~dilution,
                         data=data,
                         fct=drc::LL.4(
-                                fixed = c(NA, 0, NA, NA), 
+                                fixed = c(NA, blank_value, NA, NA), 
                                 names = c("b", "c", "d", "e")))
                 
                 
                 model_type="Net MFI, 3P-log-logistic"
                 
-                avg <- mean(data$netmfi_value)
+                avg <- mean(data$avgMFI)
                 residuals <- fit$predres[,2]
-                R.squared <- 1-sum(residuals^2)/sum((data$netmfi_value-avg)^2)
+                R.squared <- 1-(sum(residuals^2)/sum((data$avgMFI-avg)^2))
                 
                 
                 if(R.squared>1) warning("R-squared over 1")
@@ -487,6 +489,13 @@ get5PLL_RAU<- function(value,fit, max_dilution=10^5,min_dilution=10^2){
         
 }
 
+#combine lapply and bind_rows function
+bind_lapply <-function(your_list,
+                       your_function,
+                       your_id){
+        lapply(your_list,FUN = your_function) %>%
+                bind_rows(.id=your_id)
+} 
 
 # # new  RAU function
 # get3PLL_RAU<- function(value,fit, max_dilution=10^5){

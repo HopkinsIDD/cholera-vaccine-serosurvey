@@ -108,8 +108,7 @@ standards_curves <- list()
 control_data <- data.frame() 
 sample_data <- data.frame()
 
-
-for(i in 1:nrow(batches)){
+for(i in 34:nrow(batches)){
         cat(batches$batch[i],"\n")
 
         this_batch<- batches$batch[i]
@@ -249,21 +248,28 @@ for(i in 1:nrow(batches)){
                 write_rds(control_df, glue::glue('{match_dir_path}{this_batch}/{this_batch}_RAU_controls.rds'))
                 write_rds(sample_df, glue::glue('{match_dir_path}{this_batch}/{this_batch}_RAU_sample.rds'))
                 
-                #save curve objects in one place
-                standards_curves[[this_batch]] <- fits_obj
-                write_rds(standards_curves, glue::glue('{match_dir_path}standards_curves.rds'))
-                
-                #save controls data in one place
-                if(nrow(control_df)>0) control_data <- bind_rows(control_data,control_df)
-                write_rds(control_data, glue::glue('{match_dir_path}control_data.rds'))
-                
-                #save samples data in one place
-                if(nrow(sample_df)>0) sample_data <- bind_rows(sample_data,sample_df)
-                write_rds(sample_data, glue::glue('{match_dir_path}sample_data.rds'))
-                
-                
-        }
-}
+                #identify the R^2 values for the plate
+                r_squareds <- bind_lapply(your_list=fits_obj, your_id="isotype",
+                                          your_function=function(x) bind_lapply(x,your_id="antigen",
+                                                                                your_function = function(y) data.frame(r_squared=y$R.squared)
+                                          ))
+                #only calculate those with all curves with high R^2
+                if(nrow(r_squareds)>0){
+                        if(all(pull(r_squareds,r_squared)>0.9)){
+                                #save curve objects in one place
+                                standards_curves[[this_batch]] <- fits_obj
+                                write_rds(standards_curves, glue::glue('{match_dir_path}standards_curves.rds'))
+                                
+                                #save controls data in one place
+                                if(nrow(control_df)>0) control_data <- bind_rows(control_data,control_df)
+                                write_rds(control_data, glue::glue('{match_dir_path}control_data.rds'))
+                                
+                                #save samples data in one place
+                                if(nrow(sample_df)>0) sample_data <- bind_rows(sample_data,sample_df)
+                                write_rds(sample_data, glue::glue('{match_dir_path}sample_data.rds'))
+                        }
+                }
+}}
 
 
 
@@ -279,16 +285,15 @@ pred_curve <- function(standard_antigen,
                 )
                 
                 data.frame(prediction=predicted_value,
-                           dilution=pred_diluctions) %>%
-                        mutate(model_type=standard_antigen$model_type)
+                           dilution=pred_diluctions
+                           ) %>%
+                        mutate(model_type=standard_antigen$model_type) %>%
+                        mutate(r_squared = standard_antigen$R.squared)
         }
 
-bind_lapply <-function(your_list,
-                       your_function,
-                       your_id){
-        lapply(your_list,FUN = your_function) %>%
-                bind_rows(.id=your_id)
-} 
+
+
+
 
 standards_curves<- read_rds(glue::glue('{match_dir_path}standards_curves.rds'))
 
@@ -310,15 +315,25 @@ predicted_curves <- bind_lapply(your_list=standards_curves, your_id="batch",
                         ) )
                         
 
-filter(predicted_curves,antigen=="Ogawa OSP:BSA",isotype=="IgA") %>%
+
+predicted_curves %>%filter(r_squared<0.95) %>% View()
+
+filter(predicted_curves,antigen=="Ogawa OSP:BSA") %>%
         filter(subclass=="total")%>%
         ggplot(aes(x=dilution,y=prediction))+
-        geom_line(aes(group=batch,col=model_type),alpha=0.5)+
-        scale_x_continuous(trans = "log10")
+        geom_line(aes(group=batch,col=batch=="20220202_p0022"),alpha=0.5)+
+        scale_x_continuous(trans = "log10")+
+        facet_wrap(.~isotype)+
+        geom_vline(xintercept = c(10^2,10^5),lty=2)+
+        ylab("predicted avg MFI")
+
+
 
 
 
 sample_data <- read_rds(glue::glue('{match_dir_path}sample_data.rds'))
+
+
 
 
 #run qc report
