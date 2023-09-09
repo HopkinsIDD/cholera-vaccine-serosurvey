@@ -108,7 +108,7 @@ standards_curves <- list()
 control_data <- data.frame() 
 sample_data <- data.frame()
 
-for(i in 34:nrow(batches)){
+for(i in 1:nrow(batches)){
         cat(batches$batch[i],"\n")
 
         this_batch<- batches$batch[i]
