@@ -27,9 +27,9 @@ pacman::p_load(
 ## Overview
 
 - Plate ID: `r params$batch_id` 
-- Date of Run: `r as.Date(as.numeric(params$merge_obj$layout_extract$summary$description[2,2]), origin = "1899-12-30")`
-- Technician Name: `r if(params$merge_obj$layout_extract$summary$version=="1.1") params$merge_obj$layout_extract$summary$description[1,4]`
-- Plate Notes: `r params$merge_obj$layout_extract$summary$description[3,2]`
+- Date of Run: `r unique(params$merge_obj$data_extract$date)`
+- Technician Name: `r if(params$merge_obj$layout_extract$summary$version=="1.1") params$merge_obj$layout_extract$summary$description[1,4]%>% as.character()`
+- Plate Notes: `r params$merge_obj$layout_extract$summary$description[3,2]%>% as.character()`
 
 Isotype & Subclass:
 
@@ -70,6 +70,8 @@ if(params$merge_obj$layout_extract$summary$version=="1.1"){
 
 ## Bead Counts
 
+- Bead counts under 30 are considered unusable
+
 ### Heatmap
 
 ```{r count-heat, eval=TRUE}
@@ -77,25 +79,34 @@ full_data <- params$merge_obj$extract_merge %>%
                 mutate(location_number=str_extract(location,"[0-9]{1,2}"),
                        location_letter=str_extract(location,"[A-Z]{1,2}")
                        ) %>%
-                mutate(location_number=as.numeric(location_number))
+                mutate(location_number=as.numeric(location_number))%>%
+                filter(isotype==params$iso)%>%
+                filter(subclass==unique(params$merge_obj$layout_extract$summary$antibody$subclass))
+
 
 
 full_data %>%
   full_join(expand_grid(location_letter=LETTERS[1:16],
                         antigen_exponent=unique(full_data$antigen_exponent)
-  )) %>%
+  ),by = c("antigen_exponent", "location_letter")) %>%
   filter(!is.na(sample))%>% 
+  mutate(count_factor=cut(Count,breaks = c(0,1,30,50,100,1000,3000),right = FALSE))%>%     
   ggplot(aes(x=location_number,
              y=location_letter),
   )+
-  geom_tile(aes(fill=Count))+
-  # facet_wrap(.~batch)+
-  scale_fill_viridis_b(option="viridis",direction=-1,breaks=c(1,30,50,100,1000),
-                       trans="sqrt",
-                       limits=c(0,3000)#,
-                       # guide = guide_legend(label.theme = element_text())
-                       
-  )+
+  # geom_tile(aes(fill=Count))+
+  # scale_fill_viridis_b(option="plasma",direction=-1,breaks=c(1,30,50,100,1000),
+  #                      trans="sqrt",
+  #                      limits=c(0,3000)#,
+  #                      # guide = guide_legend(label.theme = element_text())
+  # 
+  # )+
+  geom_tile(aes(fill=count_factor))+
+  scale_fill_manual("Count",
+                    values=c("red","orange","yellow","blue","dark blue","magenta"),
+                    drop = FALSE
+                    )+     
+  facet_wrap(.~batch)+
   theme_bw()+
   facet_wrap(.~antigen_exponent)+
   scale_x_continuous("Number",limits=c(0,24),breaks = c(6,12,18,24))+
@@ -108,13 +119,13 @@ full_data %>%
 
 ### Antigen-wells with low counts
 
-```{r low-count, eval=FALSE}
+```{r low-count, eval=TRUE}
 
 count_threshold <- 30
 tab1 <- filter(params$merge_obj$extract_merge, Count<count_threshold) %>%
                         filter(!str_detect(sample,"Blank"))  %>%
                 filter(isotype==params$iso)%>%
-                filter(subclass==params$merge_obj$layout_extract$summary$antibody$subclass)
+                filter(subclass==unique(params$merge_obj$layout_extract$summary$antibody$subclass))
 
 
 tab1 %>%
@@ -133,16 +144,16 @@ tab1 %>% download_this(
 
 ## Coefficient of variation (CV)
 
+- CV was calculated after MFI measurements were log10 transformed.
+
 ### Controls and Standards with CV>20%
 
-In the past, we have retested plates when when over half of the positive control dilutions had >=X antigens with a coefficient of variation (calculated from replicate MFI measurements) greater than 20%.
-
-```{r cv1, eval=FALSE}
+```{r cv1, eval=TRUE}
 
 cv_threshold <- 0.2
 high_cv <- filter(params$merge_obj$extract_merge, Count>=count_threshold) %>%
                 filter(isotype==params$iso)%>%
-                filter(subclass==params$merge_obj$layout_extract$summary$antibody$subclass)%>%
+                filter(subclass==unique(params$merge_obj$layout_extract$summary$antibody$subclass))%>%
                 #work on the log scale
                 mutate(MFI=log10(MFI))%>%
                 #calculate the average MFI and CV
@@ -177,7 +188,7 @@ cv_df1 %>% download_this(
 
 ### Samples with CV>20%
 
-```{r cv2, eval=FALSE}
+```{r cv2, eval=TRUE}
 
 cv_df2 <- high_cv %>%
         filter(type =="Sample")%>%
@@ -199,25 +210,26 @@ cv_df2 %>% download_this(
 
 ## Dilution curve
 
-- Dots indicate the log10(MFI) of dilutions on the curve
-- Blue rugplot on left indicates the values of non-control wells
-- Colored rugplot on the right indicate the log10(MFI) values of control wells
+- Dashed lines set at 10^2 and 10^5, upper and lower limits for RAU
 
 ```{r dilution-curves, eval=TRUE}
 
 fit_curves_df<- filter(params$curves,isotype==params$iso) %>%
-        filter(subclass==params$merge_obj$layout_extract$summary$antibody$subclass)
+                filter(subclass==unique(params$merge_obj$layout_extract$summary$antibody$subclass))
 
 standards_df <- params$merge_obj$extract_merge %>%
         filter(type=="Standard")%>%
-        filter(subclass==params$merge_obj$layout_extract$summary$antibody$subclass) %>%
+        filter(isotype==params$iso) %>%
+        filter(subclass==unique(params$merge_obj$layout_extract$summary$antibody$subclass)) %>%
         rename(antigen=antigen_exponent)%>%
         mutate(dilution=str_remove(sample,"\\,"))%>%
         mutate(dilution=str_extract(dilution,"1:[0-9]{1,7}")) %>%
         mutate(dilution=str_remove(dilution,"1:"))%>%
-        mutate(dilution=as.numeric(dilution)) 
+        mutate(dilution=as.numeric(dilution)) %>%
+        filter(Count>0)
 
-ggplot()+
+if(nrow(standards_df)>0){
+        ggplot()+
         geom_line(data=fit_curves_df,
                   aes(group=batch,y=prediction,x=dilution),
                   alpha=0.3)+
@@ -231,6 +243,8 @@ ggplot()+
         geom_vline(xintercept = c(10^2,10^5),lty=2)+
         ylab("log10(MFI)")+
         cowplot::theme_cowplot()
+} 
+
 
 ```
 
@@ -240,7 +254,7 @@ ggplot()+
 
 
 positive_controls<- filter(params$controls,isotype==params$iso) %>%
-        filter(subclass==params$merge_obj$layout_extract$summary$antibody$subclass) %>% 
+                filter(subclass==unique(params$merge_obj$layout_extract$summary$antibody$subclass)) %>% 
         filter(str_detect(sample,"Sialidase|Hi O1 Positive B"))
 
 #only graph if the plate is included
@@ -252,43 +266,13 @@ if(nrow(filter(positive_controls,batch==params$batch_id))>0){
                 facet_wrap(.~antigen_exponent)+
                 cowplot::theme_cowplot()+
                 theme(axis.text.x = element_blank())+
-                scale_y_continuous("log10(MFI)",limits=c(1,7))+
+                scale_y_continuous("log10(MFI)",limits=c(0.5,7))+
                 xlab("Batch")+
-                ggtitle(glue::glue("{params$iso} {params$merge_obj$layout_extract$summary$antibody$subclass}"))+
+                ggtitle(glue::glue("{params$iso} {unique(params$merge_obj$layout_extract$summary$antibody$subclass)}"))+
                 scale_color_manual("Current Batch", values=c("black","red"))
 
 
 }
-
-
-```
-
-
-```{r}
-
-# control_MFI %>%
-#   filter(isotype==iso,!is.na(dilution)) %>%
-#   mutate(std_type=case_when(str_detect(Sample,"O1 Standard") ~ "VC O1",
-#                             str_detect(Sample,"COVID") ~ "COVID",
-#                             str_detect(Sample,"Typhi") ~ "Typhi 6"
-#   )) %>%
-#   ggplot()+
-#   geom_point(aes(x=log10(dilution),y=log10(Median),pch=std_type),alpha=0.3)+
-#   geom_rug(data=control_MFI %>%
-#              filter(is.na(dilution)) %>%
-#              filter(isotype==iso),
-#            sides="right",
-#            aes(y=log10(Median),
-#                col=Sample
-#            ))+
-#   geom_rug(data=sample_MFI,
-#            sides="left",
-#            aes(y=log10(Median),
-#            ),alpha=0.3, col="blue")+
-#   facet_wrap(.~antigen)+
-#   theme_cowplot()+
-#   ylab("log10(MFI)")+
-#   ggtitle(paste(iso,"Dilution Series"))
 
 
 ```

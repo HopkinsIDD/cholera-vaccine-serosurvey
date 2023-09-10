@@ -26,6 +26,8 @@ batches <- matched_layout %>%
                 filter(data_file %in% data_files) %>%
                 select(batch,data_file,layout_file=file) 
 
+#match directory path
+match_dir_path <- "data/generated_data/quality_control/"
 
 
 #create folders with all of the merged data
@@ -103,8 +105,6 @@ for(i in 1:nrow(batches)){
         
 }
 
-#match directory path
-match_dir_path <- "data/generated_data/quality_control/"
 
 #calculate the averages and fit standard curves for each batch
 standards_curves <- list()
@@ -303,6 +303,8 @@ write_rds(predicted_curves,glue::glue('{match_dir_path}predicted_curves.rds'))
 
 #run qc report
 for(i in 1:nrow(batches)){
+
+        cat(batches$batch[i],"\n")
         
         this_batch<- batches$batch[i]
         this_folder <-here::here(glue::glue("{match_dir_path}{this_batch}/"))
@@ -325,14 +327,32 @@ for(i in 1:nrow(batches)){
                                                   controls=read_rds(glue::glue(here::here("{match_dir_path}control_data.rds")))
                                           ),
                                           output_file = here::here(glue::glue('{match_dir_path}{this_batch}/{this_batch}_{this_iso}_qc_report.html')
-                                          ))
+                                          ),
+                                          quiet = TRUE
+                                          )
                         
                         
                 }       
-                
-
 }
-        
+
+
+
+# go through all the .html files to find the ones that are worth keeping 
+#note in an excel file which data are worth keeping
+i=1
+this_batch<- batches$batch[i]
+this_folder <-here::here(glue::glue("{match_dir_path}{this_batch}/"))
+this_merge <- glue::glue("{this_folder}{this_batch}_merge.rds") %>%
+        read_rds()
+
+##do this for every isotype
+#identify the isotypes in data
+these_isotypes <- unique(this_merge$extract_merge$isotype)
+for(this_iso in these_isotypes){
+        browseURL(here::here(glue::glue('{match_dir_path}{this_batch}/{this_batch}_{this_iso}_qc_report.html')))
+}
+i <- i+1
+
 
 
 #clean up the sample data
