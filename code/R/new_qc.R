@@ -111,8 +111,7 @@ standards_curves <- list()
 control_data <- data.frame() 
 sample_data <- data.frame()
 
-#for(i in 1:nrow(batches)){
-i=1
+for(i in 1:nrow(batches)){
         cat(batches$batch[i],"\n")
 
         this_batch<- batches$batch[i]
@@ -145,10 +144,7 @@ i=1
                         mutate(cvMFI=sdMFI/avgMFI,
                                diff_avg=MFI-avgMFI
                         )  %>%
-                        filter(cvMFI> cv_threshold ) 
-                
-                write_rds(low_beads_location, glue::glue('{match_dir_path}{this_batch}/{this_batch}_low_beads_location.rds'))
-                write_rds(high_cv_location, glue::glue('{match_dir_path}{this_batch}/{this_batch}_high_cv_location.rds'))
+                        filter(cvMFI> cv_threshold) 
                 
                 furthest_points<- high_cv_location %>%
                         #identify the MFI that is farthest from the average
@@ -281,17 +277,7 @@ i=1
                         }
                 }
         }
-#}
-
-
-
-
-
-
-
-
-standards_curves<- read_rds(glue::glue('{match_dir_path}standards_curves.rds'))
-
+}
 
 #predicted curves to plot against
 predicted_curves <- bind_lapply(your_list=standards_curves, your_id="batch",
@@ -299,61 +285,53 @@ predicted_curves <- bind_lapply(your_list=standards_curves, your_id="batch",
                         your_function = function(y) bind_lapply(y, your_id="antigen",
                             your_function = pred_curve
                     ))) %>%
-                mutate(subclass=case_when(
-                        str_detect(batch,"IGA_1") ~ "1",
-                        str_detect(batch,"IGA_2") ~ "2",
-                        str_detect(batch,"IGG_1") ~ "1",
-                        str_detect(batch,"IGG_2") ~ "2",
-                        str_detect(batch,"IGG_3") ~ "3",
-                        str_detect(batch,"IGG_4") ~ "4",
-                        TRUE ~ "total"
-                        ) )
+        mutate(subclass=case_when(
+                str_detect(batch,"IGA_1") ~ "1",
+                str_detect(batch,"IGA_2") ~ "2",
+                str_detect(batch,"IGG_1") ~ "1",
+                str_detect(batch,"IGG_2") ~ "2",
+                str_detect(batch,"IGG_3") ~ "3",
+                str_detect(batch,"IGG_4") ~ "4",
+                TRUE ~ "total"
+        ) )
 
 write_rds(predicted_curves,glue::glue('{match_dir_path}predicted_curves.rds'))
                         
 
 
-# predicted_curves %>%filter(r_squared<0.9) %>% View()
-# 
-
-
-
-predicted_curves <- read_rds(glue::glue('{match_dir_path}predicted_curves.rds'))
 
 
 #run qc report
-#for(i in 1:nrow(batches)){
-        i=1
-        this_folder <-here::here(glue::glue("{match_dir_path}{this_batch}/"))
+for(i in 1:nrow(batches)){
+        
         this_batch<- batches$batch[i]
+        this_folder <-here::here(glue::glue("{match_dir_path}{this_batch}/"))
         this_merge <- glue::glue("{this_folder}{this_batch}_merge.rds") %>%
                 read_rds()
         
-        ##do this for every isotype
-        #identify the isotypes in data
-        these_isotypes <- unique(this_merge$extract_merge$isotype)
-        for(this_iso in these_isotypes){
+                ##do this for every isotype
+                #identify the isotypes in data
+                these_isotypes <- unique(this_merge$extract_merge$isotype)
+                for(this_iso in these_isotypes){
+                        
+                        #run the QA/QC analysis
+                        rmarkdown::render(here::here('code/Rmd/qc_report.Rmd'),
+                                          knit_root_dir = here::here(),
+                                          params = list(
+                                                  batch_id = this_batch,
+                                                  merge_obj = this_merge,
+                                                  iso=this_iso,
+                                                  curves=read_rds(glue::glue(here::here('{match_dir_path}predicted_curves.rds'))),
+                                                  controls=read_rds(glue::glue(here::here("{match_dir_path}control_data.rds")))
+                                          ),
+                                          output_file = here::here(glue::glue('{match_dir_path}{this_batch}/{this_batch}_{this_iso}_qc_report.html')
+                                          ))
+                        
+                        
+                }       
                 
-                #run the QA/QC analysis
-                rmarkdown::render(here::here('code/Rmd/qc_report.Rmd'),
-                                  knit_root_dir = here::here(),
-                                  params = list(
-                                          batch_id = this_batch,
-                                          merge_obj = this_merge,
-                                          iso=this_iso,
-                                          low_beads=read_rds(glue::glue("{this_folder}{this_batch}_low_beads_location.rds")),
-                                          high_cv = read_rds(glue::glue("{this_folder}{this_batch}_high_cv_location.rds")),
-                                          standards= read_rds(glue::glue("{this_folder}{this_batch}_standards.rds")),
-                                          curves=predicted_curves
-                                  ),
-                                  output_file = here::here(glue::glue('{match_dir_path}{this_batch}/{this_batch}_{this_iso}_qc_report.html')
-                                  ))
-                
-                
-        }
-        
-        
-#}
+
+}
         
 
 
@@ -415,4 +393,7 @@ clean_sample_data %>%
         scale_y_continuous(trans = "log10")+
         scale_x_continuous(trans = "sqrt")+
         cowplot::theme_cowplot()
+
+
+
 
