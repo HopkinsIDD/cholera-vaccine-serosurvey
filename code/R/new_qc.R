@@ -1,3 +1,4 @@
+#load functions
 pacman::p_load(
         tidyverse,
         readxl
@@ -112,6 +113,7 @@ control_data <- data.frame()
 sample_data <- data.frame()
 
 for(i in 1:nrow(batches)){
+
         cat(batches$batch[i],"\n")
 
         this_batch<- batches$batch[i]
@@ -210,6 +212,12 @@ for(i in 1:nrow(batches)){
                                 mutate(dilution=str_extract(dilution,"1:[0-9]{1,7}")) %>%
                                 mutate(dilution=str_remove(dilution,"1:"))%>%
                                 mutate(dilution=as.numeric(dilution)) 
+                        
+                        #on plate 22, remove the 160 dilution
+                        if(this_batch=="20220202_p0022"){
+                                this_standard_df <- this_standard_df %>%
+                                        filter(dilution!=160)
+                        }
                         
                         #store the standard data.frame
                         standard_df <- bind_rows(standard_df,this_standard_df)
@@ -338,8 +346,9 @@ for(i in 1:nrow(batches)){
 
 
 # go through all the .html files to find the ones that are worth keeping 
-#note in an excel file which data are worth keeping
 i=1
+
+#note in an excel file which data are worth keeping
 this_batch<- batches$batch[i]
 this_folder <-here::here(glue::glue("{match_dir_path}{this_batch}/"))
 this_merge <- glue::glue("{this_folder}{this_batch}_merge.rds") %>%
@@ -356,11 +365,16 @@ i <- i+1
 
 
 #clean up the sample data
-
+accept_reject_df <- read_excel("data/raw_data/accept_reject_plates.xlsx")
+accepted_plates <-accept_reject_df %>%
+                        filter(accept_reject=="Accept")%>%
+                        pull(batch_id)
 sample_data <- read_rds(glue::glue('{match_dir_path}sample_data.rds'))
 
 
+#create a clean version of the data sets
 clean_sample_data <- sample_data %>%
+        filter(batch %in% accepted_plates) %>%
         mutate(sample=str_replace(sample," ","_")) %>%
         mutate(sample=toupper(sample))%>%
         mutate(id=str_remove(sample,"_D[0-9]{1,4}")) %>% 
@@ -369,50 +383,68 @@ clean_sample_data <- sample_data %>%
         ))%>%
         mutate(day=str_extract(sample,"_D[0-9]{1,4}")) %>% 
         mutate(day=str_remove(day,"_D")) %>%
-        mutate(day=as.numeric(day))%>%
-        mutate(subclass=case_when(
-                str_detect(batch,"IGA_1") ~ "1",
-                str_detect(batch,"IGA_2") ~ "2",
-                str_detect(batch,"IGG_1") ~ "1",
-                str_detect(batch,"IGG_2") ~ "2",
-                str_detect(batch,"IGG_3") ~ "3",
-                str_detect(batch,"IGG_4") ~ "4",
-                TRUE ~ "total"
-        ) )
-clean_sample_data %>% 
-        group_by(isotype,subclass,id,day,antigen)  %>%
+        mutate(day=as.numeric(day)) %>%
+        group_by(isotype,subclass,id,day,antigen_exponent) %>%
         filter(date==max(date))%>%
-        ungroup()%>%
-        count(isotype,subclass,id,day,antigen) %>% 
-        count(n)%>%
+        ungroup()
+
+#check the different study codes for trajectories
+s = 1
+study_codes <- unique(clean_sample_data$studycode)
+
+
+clean_sample_data %>%
+        filter(subclass=="total")%>%
+        filter(studycode ==study_codes[s]) %>%
+        filter(str_detect(antigen_exponent,"CtxB|Ogawa"))%>%
+        ggplot(aes(x=day,y=1/RAU_value,col=antigen_exponent))+
+        geom_line()+
+        geom_point()+
+        scale_y_continuous(trans = "log10")+
+        facet_grid(isotype~id)+
+        cowplot::theme_cowplot()+
+        theme(axis.text.x = element_text(angle=45,hjust=1))
+
+s <- s+1
+
+
+
+
+
+analysis_set <- clean_sample_data %>%
+        filter(subclass=="total")%>%
+        filter(studycode %in% c("IMS","P","S","R2")) #%>%
+        # filter(!str_detect(antigen_exponent,"139"))%>%
+        # group_by(sample)%>%
+        # mutate(n=n())%>%
+        # filter(n==33)%>%
+        # select(-n)%>%
+        # ungroup()
+
+analysis_set %>%
+        count(isotype,antigen_exponent) %>% 
         View()
 
-
-clean_sample_data %>% 
-        mutate(combo=paste(isotype,subclass,id,day,antigen)) %>%
-        group_by(combo)%>%
-        mutate(n=n())%>%
-        filter(n>1)%>%
-        filter(isotype=="IgG")%>%
-        filter(subclass=="total")%>%
-        filter(str_detect(antigen,"CtxB|Ogawa"))%>%
-        ggplot(aes(x=log10(RAU_value),y=combo))+
-        geom_boxplot()
+analysis_set %>%
+        distinct(studycode,id,sample)%>%
+        group_by(studycode)%>%
+        summarize(participants=length(unique(id)),
+                  samples=n()
+                  )
 
 
-clean_sample_data %>% 
-        group_by(isotype,subclass,id,day,antigen) %>%
-        filter(date==max(date))%>%
-        ungroup()%>%
-        filter(subclass=="total")%>%
-        filter(studycode %in% c("IMS","P","S","R2")) %>%
-        filter(str_detect(antigen,"CtxB|Ogawa"))%>%
+analysis_set%>%
+        filter(str_detect(antigen_exponent,"CtxB|Ogawa") )%>%
         ggplot(aes(x=day,y=1/RAU_value))+
         geom_line(aes(group=id,col=studycode),alpha=0.5)+
-        facet_grid(isotype~antigen)+
+        geom_smooth(aes(col=studycode),se=FALSE)+
+        facet_grid(isotype~antigen_exponent)+
         scale_y_continuous(trans = "log10")+
         scale_x_continuous(trans = "sqrt")+
         cowplot::theme_cowplot()
+
+
+
 
 
 

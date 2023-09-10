@@ -226,7 +226,7 @@ standards_df <- params$merge_obj$extract_merge %>%
         mutate(dilution=str_extract(dilution,"1:[0-9]{1,7}")) %>%
         mutate(dilution=str_remove(dilution,"1:"))%>%
         mutate(dilution=as.numeric(dilution)) %>%
-        filter(Count>0)
+        filter(Count>=count_threshold)
 
 if(nrow(standards_df)>0){
         ggplot()+
