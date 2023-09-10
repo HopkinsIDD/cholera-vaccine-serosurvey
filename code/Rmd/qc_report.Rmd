@@ -8,7 +8,11 @@ params:
   batch_id: batch_id 
   merge_obj: merge_obj
   iso: iso
-title: "Quality Control for `r params$batch_id`"
+  curves: curves
+  standards: standards
+  low_beads: low_beads
+  high_cv: high_cv
+title: "Quality Control for `r glue::glue('{params$batch_id} [{params$iso}]')`"
 ---
 
 ```{r setup, include=FALSE}
@@ -29,10 +33,11 @@ pacman::p_load(
 - Technician Name: `r if(params$merge_obj$layout_extract$summary$version=="1.1") params$merge_obj$layout_extract$summary$description[1,4]`
 - Plate Notes: `r params$merge_obj$layout_extract$summary$description[3,2]`
 
-Isotype:
+Isotype & Subclass:
 
 ```{r eval=TRUE}
 params$merge_obj$layout_extract$summary$antibody %>%
+  filter(isotype==params$iso)%>%
   select(isotype,subclass,wells) %>%
   flextable::flextable() %>%
   flextable::autofit()
@@ -107,19 +112,14 @@ full_data %>%
 
 ```{r eval=TRUE}
 
-tab1 <- full_data %>% filter(Count<50) %>%  
-  group_by(sample,location) %>%
-  summarize(`<50 Beads occurrences`=n(),
-            `<30 Beads occurrences`=sum(Count<30),
-            `0 Beads occurrences`=sum(Count==0)
-  ) %>%
-  arrange(-`<30 Beads occurrences`) 
+tab1 <- params$low_beads %>%
+                filter(isotype==params$iso)
 
 tab1 %>%
   DT::datatable()
 
 tab1 %>% download_this(
-  output_name = paste0("low_bead_counts_",params$batch_id),
+  output_name = paste0("low_bead_counts",params$batch_id,params$iso,sep="_"),
   output_extension = ".xlsx",
   button_label = "Download as xlsx",
   button_type = "warning",
@@ -128,61 +128,24 @@ tab1 %>% download_this(
 )
 
 ```
-
-
-### Samples without replicates
-
-After removing all measurements with fewer than 30 beads, some samples will not have replicates.
-
-```{r}
-tab2 <- full_data %>% 
-  group_by(sample,antigen_exponent) %>%
-  summarize(`# of observations with 30+ Beads`=sum(Count>30)) %>%
-  filter(`# of observations with 30+ Beads`<=1)
-
-tab2 %>% DT::datatable()
-
-tab2 %>% download_this(
-  output_name = paste0("obs_bead_counts_",batch_id),
-  output_extension = ".xlsx",
-  button_label = "Download as xlsx",
-  button_type = "warning",
-  has_icon = TRUE,
-  icon = "fa fa-save"
-)
-
-
-```
-
-
 
 ## Coefficient of variation (CV)
 
-### Positive controls with CV>20%
+### Controls and Standards with CV>20%
 
 In the past, we have retested plates when when over half of the positive control dilutions had >=X antigens with a coefficient of variation (calculated from replicate MFI measurements) greater than 20%.
 
-```{r}
+```{r cv1, eval=TRUE}
 
-cv_df1 <- control_MFI %>%
-  filter(str_detect(Sample,"Hi O1 Pos|Hi O139 Pos|Typhi 6 1:100")) %>%
-  group_by(Sample,antigen,dilution,isotype) %>%
-  summarize(n=n(),
-            mean=mean(Median),
-            sd=sd(Median),
-            cv=sd/mean
-  ) %>%
-  group_by(Sample,dilution,isotype) %>%
-  summarize(antigens=n(),
-            `CV >=20%` = sum(cv>0.2)
-  ) %>%
-  arrange(dilution)
+cv_df1 <- params$high_cv %>%
+        filter(type %in% c("Control","Standard"))%>%
+        filter(isotype==params$iso)
 
 
 cv_df1 %>%DT::datatable()
 
 cv_df1 %>% download_this(
-  output_name = paste0("cv_summary_",batch_id),
+  output_name = paste0("cv1_summary",params$batch_id,params$iso,sep="_"),
   output_extension = ".xlsx",
   button_label = "Download as xlsx",
   button_type = "warning",
@@ -192,39 +155,26 @@ cv_df1 %>% download_this(
 
 ```
 
-### CV distribution among samples
+### Samples with CV>20%
 
-```{r}
+```{r cv2, eval=TRUE}
 
-cv_df2 <- MFI_df %>% 
-  group_by(Sample,antigen,isotype) %>%
-  summarize(n=n(),
-            mean=mean(Median),
-            sd=sd(Median),
-            cv=sd/mean
-  )  %>%
-  mutate(mean=signif(mean,3),
-         sd=signif(sd,3),
-         cv=signif(cv,3),
-  ) %>%
-  filter(n>1) %>%
-  arrange(-cv)
+cv_df2 <- params$high_cv %>%
+        filter(type =="Sample")%>%
+        filter(isotype==params$iso)
 
 cv_df2 %>% DT::datatable()
-```
 
-Dashed line is at CV of 20%.
-
-```{r}
-cv_df2 %>% ggplot(aes(x=cv))+
-  geom_histogram(aes(fill=isotype))+
-  theme_bw()+
-  facet_wrap(.~antigen)+
-  geom_vline(xintercept=0.2,lty=2,col="black")
-
+cv_df2 %>% download_this(
+  output_name = paste0("cv2_summary",params$batch_id,params$iso,sep="_"),
+  output_extension = ".xlsx",
+  button_label = "Download as xlsx",
+  button_type = "warning",
+  has_icon = TRUE,
+  icon = "fa fa-save"
+)
 
 ```
-
 
 
 ## Dilution curve
@@ -233,33 +183,56 @@ cv_df2 %>% ggplot(aes(x=cv))+
 - Blue rugplot on left indicates the values of non-control wells
 - Colored rugplot on the right indicate the log10(MFI) values of control wells
 
+```{r dilution-curves, eval=TRUE}
+
+fit_curves_df<- filter(params$curves,isotype==params$iso) %>%
+        filter(subclass==params$merge_obj$layout_extract$summary$antibody$subclass)
+
+standards_df <- filter(params$standards,isotype==params$iso) %>%
+        filter(subclass==params$merge_obj$layout_extract$summary$antibody$subclass) %>%
+        rename(antigen=antigen_exponent)
+
+ggplot()+
+        geom_line(data=fit_curves_df,
+                  aes(group=batch,y=prediction,x=dilution),
+                  alpha=0.3)+
+        geom_point(data=standards_df,
+                  aes(y=avgMFI,x=dilution),
+                  col="red")+
+        scale_x_continuous(trans = "log10")+
+        facet_wrap(.~antigen,scales = "free_y")+
+        geom_vline(xintercept = c(10^2,10^5),lty=2)+
+        ylab("MFI")+
+        cowplot::theme_cowplot()
+
+```
+
+
 ```{r}
 
-# iso <- "IgA"
-
-control_MFI %>%
-  filter(isotype==iso,!is.na(dilution)) %>%
-  mutate(std_type=case_when(str_detect(Sample,"O1 Standard") ~ "VC O1",
-                            str_detect(Sample,"COVID") ~ "COVID",
-                            str_detect(Sample,"Typhi") ~ "Typhi 6"
-  )) %>%
-  ggplot()+
-  geom_point(aes(x=log10(dilution),y=log10(Median),pch=std_type),alpha=0.3)+
-  geom_rug(data=control_MFI %>%
-             filter(is.na(dilution)) %>%
-             filter(isotype==iso),
-           sides="right",
-           aes(y=log10(Median),
-               col=Sample
-           ))+
-  geom_rug(data=sample_MFI,
-           sides="left",
-           aes(y=log10(Median),
-           ),alpha=0.3, col="blue")+
-  facet_wrap(.~antigen)+
-  theme_cowplot()+
-  ylab("log10(MFI)")+
-  ggtitle(paste(iso,"Dilution Series"))
+# control_MFI %>%
+#   filter(isotype==iso,!is.na(dilution)) %>%
+#   mutate(std_type=case_when(str_detect(Sample,"O1 Standard") ~ "VC O1",
+#                             str_detect(Sample,"COVID") ~ "COVID",
+#                             str_detect(Sample,"Typhi") ~ "Typhi 6"
+#   )) %>%
+#   ggplot()+
+#   geom_point(aes(x=log10(dilution),y=log10(Median),pch=std_type),alpha=0.3)+
+#   geom_rug(data=control_MFI %>%
+#              filter(is.na(dilution)) %>%
+#              filter(isotype==iso),
+#            sides="right",
+#            aes(y=log10(Median),
+#                col=Sample
+#            ))+
+#   geom_rug(data=sample_MFI,
+#            sides="left",
+#            aes(y=log10(Median),
+#            ),alpha=0.3, col="blue")+
+#   facet_wrap(.~antigen)+
+#   theme_cowplot()+
+#   ylab("log10(MFI)")+
+#   ggtitle(paste(iso,"Dilution Series"))
 
 
 ```
@@ -268,19 +241,16 @@ control_MFI %>%
 
 ## Full Data
 
-### Luminex Data
+```{r eval=TRUE}
 
-```{r}
-
-fd <- full_data %>% 
-  select(location,isotype,antigen,Lot=lot_number,Sample,MFI=Median,Count) 
+fd <- params$merge_obj$extract_merge
 
 fd %>%
   DT::datatable()
 
 fd %>%
   download_this(
-    output_name = paste0("full_data_",batch_id),
+    output_name = paste0("full_data",params$batch_id,params$iso,sep="_"),
     output_extension = ".xlsx",
     button_label = "Download as xlsx",
     button_type = "warning",
@@ -289,14 +259,5 @@ fd %>%
   )
 ```
 
-### Layout File
-
-```{r}
-layout_1 %>% gather(Number,Description,-Letter) %>%
-  mutate(Location=paste0(Letter,Number)) %>% 
-  filter(!is.na(Description)) %>%
-  select(Location,Description) %>%
-  DT::datatable()
 
 
-```

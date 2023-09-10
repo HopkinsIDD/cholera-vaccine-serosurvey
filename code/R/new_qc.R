@@ -61,6 +61,9 @@ for(i in 1:nrow(batches)){
         }
         
         this_merge <- this_merge %>%
+                #make all VCC the same
+                mutate(antigen_exponent=ifelse(str_detect(antigen_exponent,"VCC"),"VCC",antigen_exponent))%>%
+                #create a variable for the type of measurement
                 mutate(no_control=str_remove(sample,"Control\\: ")) %>%
                 mutate(type=case_when(
                         str_detect(no_control,"\\:") ~ "Standard",
@@ -108,7 +111,8 @@ standards_curves <- list()
 control_data <- data.frame() 
 sample_data <- data.frame()
 
-for(i in 1:nrow(batches)){
+#for(i in 1:nrow(batches)){
+i=1
         cat(batches$batch[i],"\n")
 
         this_batch<- batches$batch[i]
@@ -126,15 +130,14 @@ for(i in 1:nrow(batches)){
                 # first identify points with low quality
                 count_threshold <- 30
                 low_beads_location <- filter(this_merge$extract_merge, Count<count_threshold) %>%
-                        filter(!str_detect(sample,"Blank")) %>%
-                        distinct(location)
+                        filter(!str_detect(sample,"Blank")) 
                 
                 cv_threshold <- 0.2
                 high_cv_location <- filter(this_merge$extract_merge, Count>=count_threshold) %>%
                         #work on the log scale
                         mutate(MFI=log10(MFI))%>%
                         #calculate the average MFI and CV
-                        group_by(batch,sample,isotype,antigen_exponent) %>%
+                        group_by(batch,sample,isotype,subclass,antigen_exponent) %>%
                         mutate( replicates=n(),  
                                 avgMFI=mean(MFI),
                                 sdMFI=sd(MFI)
@@ -142,7 +145,13 @@ for(i in 1:nrow(batches)){
                         mutate(cvMFI=sdMFI/avgMFI,
                                diff_avg=MFI-avgMFI
                         )  %>%
-                        filter(cvMFI> cv_threshold ) %>%
+                        filter(cvMFI> cv_threshold ) 
+                
+                write_rds(low_beads_location, glue::glue('{match_dir_path}{this_batch}/{this_batch}_low_beads_location.rds'))
+                write_rds(high_cv_location, glue::glue('{match_dir_path}{this_batch}/{this_batch}_high_cv_location.rds'))
+                
+                furthest_points<- high_cv_location %>%
+                        #identify the MFI that is farthest from the average
                         slice_max(diff_avg,n=1,
                                   with_ties = FALSE
                         ) %>%
@@ -151,20 +160,22 @@ for(i in 1:nrow(batches)){
                         filter(!str_detect(sample,"Blank")) %>%
                         distinct(location)
                 
+                
                 # remove these locations
                 these_averageMFI <- this_merge$extract_merge %>%
                         #work on the log scale
                         mutate(MFI=log10(MFI))%>%
                         #remove the locations with low beads and high cv
-                        anti_join(low_beads_location,by="location") %>%
-                        anti_join(high_cv_location,by="location")%>%
-                        group_by(batch,type,sample,isotype,antigen_exponent) %>%
+                        anti_join(distinct(low_beads_location,location),by="location") %>%
+                        anti_join(furthest_points,by="location")%>%
+                        group_by(date,batch,type,sample,isotype,subclass,antigen_exponent) %>%
                         summarize( replicates=n(),  
                                    avgMFI=mean(MFI),
                                    sdMFI=sd(MFI)
                         ) %>%
-                        mutate(cvMFI=sdMFI/avgMFI,
-                        ) %>%
+                        mutate(cvMFI=sdMFI/avgMFI) %>%
+                        #if any with a high cv still remain, remove it
+                        filter(cvMFI<=cv_threshold ) %>%
                         #only include those with more than 1 replicate
                         filter(replicates>1) %>%
                         ungroup()
@@ -220,7 +231,7 @@ for(i in 1:nrow(batches)){
                                         this_rau_df <- this_netmfi %>%
                                                 filter(antigen_exponent==anti) %>%
                                                 filter(type %in% c("Control","Sample"))%>%
-                                                mutate(RAU_value=sapply(netmfi_value, FUN=get3PLL_RAU,fit=this_fit$fit))
+                                                mutate(RAU_value=sapply(avgMFI, FUN=get3PLL_RAU,fit=this_fit))
                                         
                                 }
                                 
@@ -228,7 +239,7 @@ for(i in 1:nrow(batches)){
                                         this_rau_df <- this_netmfi %>%
                                                 filter(antigen_exponent==anti) %>%
                                                 filter(type %in% c("Control","Sample"))%>%
-                                                mutate(RAU_value=sapply(avgMFI, FUN=get5PLL_RAU,fit=this_fit$fit))
+                                                mutate(RAU_value=sapply(avgMFI, FUN=get5PLL_RAU,fit=this_fit))
                                 }
                                 # fit to standard curve
                                 fits_obj[[iso]][[anti]] <- this_fit
@@ -269,27 +280,11 @@ for(i in 1:nrow(batches)){
                                 write_rds(sample_data, glue::glue('{match_dir_path}sample_data.rds'))
                         }
                 }
-}}
-
-
-
-#takes in a antigen object from standard curves and gives a data.frame
-pred_curve <- function(standard_antigen,
-                       pred_diluctions= 10^(seq(0.1,7,0.1))
-                       ) {
-
-                
-                predicted_value <- predict(
-                        standard_antigen$fit,
-                        newdata = data.frame(dilution=pred_diluctions)
-                )
-                
-                data.frame(prediction=predicted_value,
-                           dilution=pred_diluctions
-                           ) %>%
-                        mutate(model_type=standard_antigen$model_type) %>%
-                        mutate(r_squared = standard_antigen$R.squared)
         }
+#}
+
+
+
 
 
 
@@ -313,34 +308,25 @@ predicted_curves <- bind_lapply(your_list=standards_curves, your_id="batch",
                         str_detect(batch,"IGG_4") ~ "4",
                         TRUE ~ "total"
                         ) )
+
+write_rds(predicted_curves,glue::glue('{match_dir_path}predicted_curves.rds'))
                         
 
 
-predicted_curves %>%filter(r_squared<0.95) %>% View()
-
-filter(predicted_curves,antigen=="Ogawa OSP:BSA") %>%
-        filter(subclass=="total")%>%
-        ggplot(aes(x=dilution,y=prediction))+
-        geom_line(aes(group=batch,col=batch=="20220202_p0022"),alpha=0.5)+
-        scale_x_continuous(trans = "log10")+
-        facet_wrap(.~isotype)+
-        geom_vline(xintercept = c(10^2,10^5),lty=2)+
-        ylab("predicted avg MFI")
+# predicted_curves %>%filter(r_squared<0.9) %>% View()
+# 
 
 
 
-
-
-sample_data <- read_rds(glue::glue('{match_dir_path}sample_data.rds'))
-
-
+predicted_curves <- read_rds(glue::glue('{match_dir_path}predicted_curves.rds'))
 
 
 #run qc report
-for(i in 1:nrow(batches)){
-        
+#for(i in 1:nrow(batches)){
+        i=1
+        this_folder <-here::here(glue::glue("{match_dir_path}{this_batch}/"))
         this_batch<- batches$batch[i]
-        this_merge <- glue::glue("{match_dir_path}{this_batch}/{this_batch}_merge.rds") %>%
+        this_merge <- glue::glue("{this_folder}{this_batch}_merge.rds") %>%
                 read_rds()
         
         ##do this for every isotype
@@ -354,7 +340,11 @@ for(i in 1:nrow(batches)){
                                   params = list(
                                           batch_id = this_batch,
                                           merge_obj = this_merge,
-                                          iso=this_iso
+                                          iso=this_iso,
+                                          low_beads=read_rds(glue::glue("{this_folder}{this_batch}_low_beads_location.rds")),
+                                          high_cv = read_rds(glue::glue("{this_folder}{this_batch}_high_cv_location.rds")),
+                                          standards= read_rds(glue::glue("{this_folder}{this_batch}_standards.rds")),
+                                          curves=predicted_curves
                                   ),
                                   output_file = here::here(glue::glue('{match_dir_path}{this_batch}/{this_batch}_{this_iso}_qc_report.html')
                                   ))
@@ -363,28 +353,66 @@ for(i in 1:nrow(batches)){
         }
         
         
-}
+#}
         
 
 
+#clean up the sample data
 
-# all_data_names <- all_data %>%
-#                         count(sample) %>%
-#                 mutate(no_control=str_remove(sample,"Control\\: ")) %>%
-#                 mutate(type=case_when(
-#                          str_detect(no_control,"\\:") ~ "Standard",
-#                          str_detect(sample,"Control\\: ")&(!str_detect(no_control,"\\:")) ~ "Control",
-#                          str_detect(sample,"Blank|Sialidase|Pool|PBS") ~ "Control",
-#                          TRUE  ~ "Sample"
-#                 ))
+sample_data <- read_rds(glue::glue('{match_dir_path}sample_data.rds'))
 
-        #for each isotype, conduct QA/QC
-                #bead count
-                #coefficient of variation
-                #separate troublesome wells
-                #calculate the netMFI
-                #create dilution object and fit model
-                #calculate RAU for samples and controls
-                #create html report
 
-        #output object in folder
+clean_sample_data <- sample_data %>%
+        mutate(sample=str_replace(sample," ","_")) %>%
+        mutate(sample=toupper(sample))%>%
+        mutate(id=str_remove(sample,"_D[0-9]{1,4}")) %>% 
+        mutate(studycode=str_extract(id,
+                                     "CHX_RB|E01JH|IMS|R1|R2|P|S"
+        ))%>%
+        mutate(day=str_extract(sample,"_D[0-9]{1,4}")) %>% 
+        mutate(day=str_remove(day,"_D")) %>%
+        mutate(day=as.numeric(day))%>%
+        mutate(subclass=case_when(
+                str_detect(batch,"IGA_1") ~ "1",
+                str_detect(batch,"IGA_2") ~ "2",
+                str_detect(batch,"IGG_1") ~ "1",
+                str_detect(batch,"IGG_2") ~ "2",
+                str_detect(batch,"IGG_3") ~ "3",
+                str_detect(batch,"IGG_4") ~ "4",
+                TRUE ~ "total"
+        ) )
+clean_sample_data %>% 
+        group_by(isotype,subclass,id,day,antigen)  %>%
+        filter(date==max(date))%>%
+        ungroup()%>%
+        count(isotype,subclass,id,day,antigen) %>% 
+        count(n)%>%
+        View()
+
+
+clean_sample_data %>% 
+        mutate(combo=paste(isotype,subclass,id,day,antigen)) %>%
+        group_by(combo)%>%
+        mutate(n=n())%>%
+        filter(n>1)%>%
+        filter(isotype=="IgG")%>%
+        filter(subclass=="total")%>%
+        filter(str_detect(antigen,"CtxB|Ogawa"))%>%
+        ggplot(aes(x=log10(RAU_value),y=combo))+
+        geom_boxplot()
+
+
+clean_sample_data %>% 
+        group_by(isotype,subclass,id,day,antigen) %>%
+        filter(date==max(date))%>%
+        ungroup()%>%
+        filter(subclass=="total")%>%
+        filter(studycode %in% c("IMS","P","S","R2")) %>%
+        filter(str_detect(antigen,"CtxB|Ogawa"))%>%
+        ggplot(aes(x=day,y=1/RAU_value))+
+        geom_line(aes(group=id,col=studycode),alpha=0.5)+
+        facet_grid(isotype~antigen)+
+        scale_y_continuous(trans = "log10")+
+        scale_x_continuous(trans = "sqrt")+
+        cowplot::theme_cowplot()
+

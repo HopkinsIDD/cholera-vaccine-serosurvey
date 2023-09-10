@@ -443,18 +443,18 @@ fitLL_model <- function(data) {
 get3PLL_RAU<- function(value,fit, max_dilution=10^5,min_dilution=10^2){
         
         
-        max_value<- predict(this_fit$fit,newdata = data.frame(dilution=min_dilution))
-        min_value<- predict(this_fit$fit,newdata = data.frame(dilution=max_dilution))
+        max_value<- predict(fit$fit,newdata = data.frame(dilution=min_dilution))
+        min_value<- predict(fit$fit,newdata = data.frame(dilution=max_dilution))
         
 
         if(value>=max_value) RAU <- min_dilution
         if(value<=min_value) RAU <- max_dilution
 
         if(value <max_value& value > min_value){
-                B <- fit$coefficients[1]
-                C <- 0
-                D <- fit$coefficients[2]
-                E <- fit$coefficients[3]
+                B <- fit$fit$coefficients[1]
+                C <- unique(fit$data$blank)
+                D <- fit$fit$coefficients[2]
+                E <- fit$fit$coefficients[3]
 
                 RAU <- exp(log((D-C)/(value - C) -1)/B +log(E)) %>%
                         as.numeric()
@@ -467,18 +467,18 @@ get3PLL_RAU<- function(value,fit, max_dilution=10^5,min_dilution=10^2){
 
 get5PLL_RAU<- function(value,fit, max_dilution=10^5,min_dilution=10^2){
         
-        max_value<- predict(this_fit$fit,newdata = data.frame(dilution=min_dilution))
-        min_value<- predict(this_fit$fit,newdata = data.frame(dilution=max_dilution))
+        max_value<- predict(fit$fit,newdata = data.frame(dilution=min_dilution))
+        min_value<- predict(fit$fit,newdata = data.frame(dilution=max_dilution))
         
         if(value>=max_value) RAU <- min_dilution
         if(value<=min_value) RAU <- max_dilution
         
         if(value <max_value & value > min_value){
-                B <- fit$coefficients[1]
-                C <- fit$coefficients[2]
-                D <- fit$coefficients[3]
-                E <- fit$coefficients[4]
-                F_param <- fit$coefficients[5]
+                B <- fit$fit$coefficients[1]
+                C <- fit$fit$coefficients[2]
+                D <- fit$fit$coefficients[3]
+                E <- fit$fit$coefficients[4]
+                F_param <- fit$fit$coefficients[5]
                 
                 Q <- (D-C)/(value - C)
                 
@@ -489,13 +489,32 @@ get5PLL_RAU<- function(value,fit, max_dilution=10^5,min_dilution=10^2){
         
 }
 
-#combine lapply and bind_rows function
+#combine lapply and brind_rows
 bind_lapply <-function(your_list,
                        your_function,
                        your_id){
         lapply(your_list,FUN = your_function) %>%
                 bind_rows(.id=your_id)
 } 
+
+
+#takes in a antigen object from standard curves and gives a data.frame
+pred_curve <- function(standard_antigen,
+                       pred_diluctions= 10^(seq(0.1,7,0.1))
+) {
+        
+        
+        predicted_value <- predict(
+                standard_antigen$fit,
+                newdata = data.frame(dilution=pred_diluctions)
+        )
+        
+        data.frame(prediction=predicted_value,
+                   dilution=pred_diluctions
+        ) %>%
+                mutate(model_type=standard_antigen$model_type) %>%
+                mutate(r_squared = standard_antigen$R.squared)
+}
 
 # # new  RAU function
 # get3PLL_RAU<- function(value,fit, max_dilution=10^5){
