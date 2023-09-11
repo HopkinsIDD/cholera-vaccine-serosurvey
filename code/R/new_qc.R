@@ -377,10 +377,9 @@ clean_sample_data <- sample_data %>%
         filter(batch %in% accepted_plates) %>%
         mutate(sample=str_replace(sample," ","_")) %>%
         mutate(sample=toupper(sample))%>%
+        mutate(sample=str_replace(sample,"CHX_RB","RB"))%>%
         mutate(id=str_remove(sample,"_D[0-9]{1,4}")) %>% 
-        mutate(studycode=str_extract(id,
-                                     "CHX_RB|E01JH|IMS|R1|R2|P|S"
-        ))%>%
+        mutate(studycode=str_extract(id,"RB|E01JH|IMS|R1|R2|P|S"))%>%
         mutate(day=str_extract(sample,"_D[0-9]{1,4}")) %>% 
         mutate(day=str_remove(day,"_D")) %>%
         mutate(day=as.numeric(day)) %>%
@@ -388,15 +387,21 @@ clean_sample_data <- sample_data %>%
         filter(date==max(date))%>%
         ungroup()
 
-#check the different study codes for trajectories
-s = 1
+#check the different study codes for trajectories to see if there are any bad ones
 study_codes <- unique(clean_sample_data$studycode)
+s = 4
 
 
-clean_sample_data %>%
+tmp_trajectory <- clean_sample_data %>%
         filter(subclass=="total")%>%
         filter(studycode ==study_codes[s]) %>%
-        filter(str_detect(antigen_exponent,"CtxB|Ogawa"))%>%
+        filter(str_detect(antigen_exponent,"CtxB|Ogawa"))
+
+tmp_ids <- unique(tmp_trajectory$id)
+select_ids <-1:10
+
+tmp_trajectory %>%
+        filter(id %in% tmp_ids[select_ids]) %>%
         ggplot(aes(x=day,y=1/RAU_value,col=antigen_exponent))+
         geom_line()+
         geom_point()+
@@ -405,33 +410,43 @@ clean_sample_data %>%
         cowplot::theme_cowplot()+
         theme(axis.text.x = element_text(angle=45,hjust=1))
 
-s <- s+1
+select_ids <- select_ids +10
+        
+#Maybe remove
+#IMS_C004 Day 17
+#IMS_B004 Day 17
+#maybe remove those with a meteoric rise?
 
 
 
-
-
-analysis_set <- clean_sample_data %>%
+#output for analysis
+visualization_set <- clean_sample_data %>%
         filter(subclass=="total")%>%
-        filter(studycode %in% c("IMS","P","S","R2")) #%>%
-        # filter(!str_detect(antigen_exponent,"139"))%>%
-        # group_by(sample)%>%
-        # mutate(n=n())%>%
-        # filter(n==33)%>%
-        # select(-n)%>%
-        # ungroup()
+        filter(studycode %in% c("IMS","P","S","R2")) 
 
-analysis_set %>%
-        count(isotype,antigen_exponent) %>% 
-        View()
+analysis_set <- visualization_set %>%
+                        mutate(marker=paste(isotype,antigen_exponent)) %>%
+                        filter(!marker %in% c(
+                                "IgA O139:BSA",
+                                "IgM O139:BSA"
+                        )) %>%
+                        group_by(sample) %>%
+                        mutate(n=n()) %>%
+                        filter(n==31)%>%
+                        select(-n)%>%
+                        ungroup()
+write_rds(visualization_set, "data/generated_data/visualization_set.rds")
+write_rds(visualization_set, "data/generated_data/analysis_set.rds")
 
+
+### basic info and visualization
 analysis_set %>%
-        distinct(studycode,id,sample)%>%
-        group_by(studycode)%>%
+        group_by(studycode,id,sample)%>%
+        summarize(markers=length(unique(marker))) %>%
+        group_by(studycode,markers)%>%
         summarize(participants=length(unique(id)),
                   samples=n()
-                  )
-
+        )
 
 analysis_set%>%
         filter(str_detect(antigen_exponent,"CtxB|Ogawa") )%>%
@@ -442,10 +457,6 @@ analysis_set%>%
         scale_y_continuous(trans = "log10")+
         scale_x_continuous(trans = "sqrt")+
         cowplot::theme_cowplot()
-
-
-
-
 
 
 
