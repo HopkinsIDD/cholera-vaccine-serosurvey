@@ -436,7 +436,7 @@ analysis_set <- visualization_set %>%
                         select(-n)%>%
                         ungroup()
 write_rds(visualization_set, "data/generated_data/visualization_set.rds")
-write_rds(visualization_set, "data/generated_data/analysis_set.rds")
+write_rds(analysis_set, "data/generated_data/analysis_set.rds")
 
 
 ### basic info and visualization
