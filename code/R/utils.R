@@ -555,7 +555,7 @@ getWideData <- function(){
     
     
     #get demographics for Bangladeshi vaccination
-    vaccinee_shipment <- read_excel("data/raw_data/sample-availability/Bangladesh_vaccinee_Shipment_edited.xlsx",
+    vaccinee_shipment <- read_excel("data/raw_data/cohort_data/Bangladesh_vaccinee_Shipment_edited.xlsx",
                                     range = "B4:I58") %>%
             filter(!is.na(ID)) %>%
             mutate(Day=str_remove_all(Day,"Day \\(|\\)"))%>%

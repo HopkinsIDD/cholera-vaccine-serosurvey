@@ -440,7 +440,7 @@ write_rds(analysis_set, "data/generated_data/analysis_set.rds")
 
 
 ### basic info and visualization
-analysis_set %>%
+analysis_set_long %>%
         group_by(studycode,id,sample)%>%
         summarize(markers=length(unique(marker))) %>%
         group_by(studycode,markers)%>%
