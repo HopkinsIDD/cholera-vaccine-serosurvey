@@ -1,70 +1,34 @@
-analysisData<- LuminexRecPaperData(vaccinee = TRUE)
-casecon_analysis <- analysisData$RAU_data$long_data
-final_df <- read_rds("data/generated_data/sample_measurements.rds")
-
-
-
-
-#list of antigens associated with O1 cholera infection
-O1_antigens <- c("CTHT","CtxB","InabaOSPBSA","OgawaOSPBSA","Sialidase","TcpA","VCC")
-
-#data frame to join to make antigen names look nice for plots
-antigen_df <- distinct(casecon_analysis,antigen) %>%
-        filter(!is.na(antigen)) %>%
-        mutate(O1_antigen= antigen %in% O1_antigens) %>%
-        mutate(antigen_pretty = recode(antigen,
-                                       "InabaOSPBSA" = "Inaba OSP",
-                                       "OgawaOSPBSA" = "Ogawa OSP",
-                                       "O139BSA" = "O139 OSP",
-                                       "CTHT" = "CT-H",
-                                       "CtxB" = "CT-B",
-                                       "LTh" = "LT-H",
-                                       "LTB"  = "LT-B"
+final_df <- read_rds("data/generated_data/sample_measurements.rds") %>%
+        #remove haiti children
+        filter(study_code!="R1") %>%
+        #remove weird cohort bangladeshi
+        filter(!str_detect(id,"RB"))%>%
+        mutate(day_actual=day) %>%
+        mutate(RAU_value=log10(1/RAU_value)) %>%
+        #create comparison groups
+        mutate(Vaccinee=case_when(
+                cohort == "BGD Vaccinee" & age<10 ~ "Bangladeshi <10 years",
+                cohort == "BGD Vaccinee" & age>=10 ~  "Bangladeshi 10+ years",
+                cohort == "HTI Vaccinee" & age>=10 ~  "Haitian 18+ years"
         )) %>%
-        mutate(antigen_pretty = factor(antigen_pretty,
-                                       levels=c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA","VCC","Sialidase","CT-H","LT-B","LT-H","LPS","Flu")
-        ))
+        mutate(Under18=ifelse(age<18,"<18 years","18+ years"))
 
 
 
-vax_long_RAU <- analysisData$RAU_data$long_data %>%
-        filter(status=="Vaccinee") %>%
-        left_join(antigen_df)%>%
-        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
+final_wide <- final_df %>% select(study_code,cohort,status,id, day,
+                                  sample,age,Under18,sex,marker,RAU_value,culture) %>%
+        spread(marker,RAU_value) %>%
+        #remove those missing any of the three key antigens for IgG
+        filter(!if_any(.cols= c("RAU_IgG_OgawaOSPBSA",
+                                "RAU_IgG_InabaOSPBSA",
+                                "RAU_IgG_CtxB"),
+                       .fns = is.na )) %>%
+        mutate(day_actual=day)
 
-vax_wide_RAU <- analysisData$RAU_data$wide_data %>%
-        filter(status=="Vaccinee")
-
-
-vax_long_NetMFI<- analysisData$netMFI_data$long_data%>%
-        filter(status=="Vaccinee")%>%
-        left_join(antigen_df)%>%
-        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
-
-
-casecon_analysis <- casecon_analysis %>% filter(status!="Vaccinee")%>%
-        left_join(antigen_df) %>%
-        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
-
-wide_analysis <- analysisData$RAU_data$wide_data %>% filter(status!="Vaccinee")
+#limit only to those individuals who have these three antigens
+final_df <- final_df %>% filter(sample %in% final_wide$sample)
 
 
-casecon_analysisMFI <- analysisData$netMFI_data$long_data %>% filter(status!="Vaccinee")%>%
-        left_join(antigen_df)%>%
-        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
+write_rds(final_df,"data/generated_data/analysis_data/final_df.rds")
+write_rds(final_wide,"data/generated_data/analysis_data/final_wide.rds")
 
-wide_analysisMFI <- analysisData$netMFI_data$wide_data %>% filter(status!="Vaccinee")
-
-
-#create dataset for distinguishing classes of cases and vaccienes
-multi_class_data <- analysisData$netMFI_data$long_data %>%
-        filter(test_type=="Luminex")%>% 
-        filter(age>=18) %>%
-        #limit vaccinees to only baseline and "recent samples"
-        filter(!(status=="Vaccinee" & (!day %in% c(0,7,21,44)))) %>%
-        mutate(vaxinf_class =case_when(
-                status=="Case" & day !=2 & day<=120 ~ "Recently Infected",
-                status=="Vaccinee" & day %in% c(7,21,44) ~ "Recently Vaccinated",
-                TRUE ~ "Neither"
-        )) %>%
-        left_join(antigen_df) 

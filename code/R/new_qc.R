@@ -363,13 +363,12 @@ for(this_iso in these_isotypes){
 i <- i+1
 
 
-
 #clean up the sample data
 accept_reject_df <- read_excel("data/raw_data/accept_reject_plates.xlsx")
 accepted_plates <-accept_reject_df %>%
-                        filter(accept_reject=="Accept")%>%
-                        pull(batch_id)
-sample_data <- read_rds(glue::glue('{match_dir_path}sample_data.rds'))
+        filter(accept_reject=="Accept")%>%
+        pull(batch_id)
+sample_data <- read_rds('data/generated_data/quality_control/sample_data.rds')
 
 
 #create a clean version of the data sets
@@ -387,76 +386,8 @@ clean_sample_data <- sample_data %>%
         filter(date==max(date))%>%
         ungroup()
 
-#check the different study codes for trajectories to see if there are any bad ones
-study_codes <- unique(clean_sample_data$studycode)
-s = 4
+write_rds(clean_sample_data,'data/generated_data/quality_control/clean_sample_data.rds')
 
-
-tmp_trajectory <- clean_sample_data %>%
-        filter(subclass=="total")%>%
-        filter(studycode ==study_codes[s]) %>%
-        filter(str_detect(antigen_exponent,"CtxB|Ogawa"))
-
-tmp_ids <- unique(tmp_trajectory$id)
-select_ids <-1:10
-
-tmp_trajectory %>%
-        filter(id %in% tmp_ids[select_ids]) %>%
-        ggplot(aes(x=day,y=1/RAU_value,col=antigen_exponent))+
-        geom_line()+
-        geom_point()+
-        scale_y_continuous(trans = "log10")+
-        facet_grid(isotype~id)+
-        cowplot::theme_cowplot()+
-        theme(axis.text.x = element_text(angle=45,hjust=1))
-
-select_ids <- select_ids +10
-        
-#Maybe remove
-#IMS_C004 Day 17
-#IMS_B004 Day 17
-#maybe remove those with a meteoric rise?
-
-
-
-#output for analysis
-visualization_set <- clean_sample_data %>%
-        filter(subclass=="total")%>%
-        filter(studycode %in% c("IMS","P","S","R2")) 
-
-analysis_set <- visualization_set %>%
-                        mutate(marker=paste(isotype,antigen_exponent)) %>%
-                        filter(!marker %in% c(
-                                "IgA O139:BSA",
-                                "IgM O139:BSA"
-                        )) %>%
-                        group_by(sample) %>%
-                        mutate(n=n()) %>%
-                        filter(n==31)%>%
-                        select(-n)%>%
-                        ungroup()
-write_rds(visualization_set, "data/generated_data/visualization_set.rds")
-write_rds(analysis_set, "data/generated_data/analysis_set.rds")
-
-
-### basic info and visualization
-analysis_set_long %>%
-        group_by(studycode,id,sample)%>%
-        summarize(markers=length(unique(marker))) %>%
-        group_by(studycode,markers)%>%
-        summarize(participants=length(unique(id)),
-                  samples=n()
-        )
-
-analysis_set%>%
-        filter(str_detect(antigen_exponent,"CtxB|Ogawa") )%>%
-        ggplot(aes(x=day,y=1/RAU_value))+
-        geom_line(aes(group=id,col=studycode),alpha=0.5)+
-        geom_smooth(aes(col=studycode),se=FALSE)+
-        facet_grid(isotype~antigen_exponent)+
-        scale_y_continuous(trans = "log10")+
-        scale_x_continuous(trans = "sqrt")+
-        cowplot::theme_cowplot()
 
 
 

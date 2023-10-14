@@ -1,9 +1,10 @@
-
-
-
+rm(list=ls())
 source("code/R/packages.R")
 source("code/R/utils.R")
-source("code/R/load-data.R")
+
+#load the wide dataset
+final_wide <- read_rds("data/generated_data/analysis_data/final_wide.rds")
+
 
 path <- "source/final_code/vax_strategy/generated_rds/fpr-estimates/"
 tree_param <- 1000
@@ -49,12 +50,12 @@ for(t in c(45,120,200,300)){
                         addInfectionWindow(end_window=t)
                 
                 
-                # inside_w = NULL
+                inside_w = NULL
                 
                 # if(weighted){
-                inside_w <- inside_df %>%
-                        getWeight(end_window = t)  %>%
-                        pull(weight)
+                # inside_w <- inside_df %>%
+                #         getWeight(end_window = t)  %>%
+                #         pull(weight)
                 
                 # }
                 
@@ -97,9 +98,10 @@ for(t in c(45,120,200,300)){
         #fit the model
         
         #set weights if needed
-        w <- fit_data%>%
-                getWeight(end_window = t)  %>%
-                pull(weight)
+        w=NULL
+        # w <- fit_data%>%
+        #         getWeight(end_window = t)  %>%
+        #         pull(weight)
         
         
         
@@ -112,8 +114,6 @@ for(t in c(45,120,200,300)){
         
         #
         #calculate the individual's samples seropositivity
-        # test_data <- vax_wide_RAU %>%
-        #         addInfectionWindow(end_window=t)
         test_data <- final_wide %>%
                 filter(str_detect(cohort,"Vaccinee"))%>%
                 addInfectionWindow(end_window=t)
@@ -166,6 +166,8 @@ for(t in c(45,120,200,300)){
 
 write_rds(raw_df, "data/generated_data/misclassify_df2.rds")
 
+
+#model the the estimates using brms
 
 
 #new idea

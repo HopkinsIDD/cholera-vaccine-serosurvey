@@ -42,7 +42,7 @@ Serological data were also available for three uninfected household contacts of 
 ```{r eval=TRUE}
 
 
-tab1_df <- analyis_set_long %>%
+tab1_df <- final_df %>%
         filter(status %in% c("Case","Vaccinee")) %>%
         distinct(cohort,studycode,id,age_group,sex,blood,culture,status) %>%
 # get categorical variables together
@@ -104,7 +104,7 @@ Y-axis indicates the log (base 10) of the relative antibody units (RAU) with lim
 ```{r f1-spaghetti-rau,  eval=TRUE, fig.height = 7, fig.width = 10}
 
 #data for figure 1
-fig1_df <- visualization_set_long %>% 
+fig1_df <- final_df %>% 
         filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","O139 OSP","CT-B","TcpA")) %>%
         mutate(antigen_pretty=factor(antigen_pretty,levels=c("Ogawa OSP","Inaba OSP","O139 OSP","CT-B","TcpA"))) %>%
         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
@@ -217,7 +217,7 @@ misclassify_df2 <- read_rds("data/generated_data/misclassify_df2.rds")
 #         geom_hline(yintercept = 0.05,lty=2)+
 #         theme(legend.position = "bottom")
 
-f2a <- misclassify_df2 %>%
+f2a <- raw_df %>%
         group_by(day,end_window,cohort) %>%
         summarize(seropos=mean(spec95_seropos))%>%
         filter(end_window %in% c("45","120","200","300"))%>%
@@ -238,8 +238,8 @@ f2a <- misclassify_df2 %>%
         scale_y_continuous("False Positivity Rate")+
         scale_color_manual(values = c("#003262","#FDB515"))+
         scale_shape_manual(values=c(1,1))+
-        geom_hline(yintercept = 0.05,lty=2)+
-        theme(legend.position = "none")
+        geom_hline(yintercept = 0.05,lty=2)#+
+        #theme(legend.position = "none")
 
 
 #get mds measurements
