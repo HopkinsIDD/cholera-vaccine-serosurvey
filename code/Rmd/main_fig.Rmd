@@ -306,28 +306,43 @@ plot_grid(f2a,f2b,ncol=1,
 
 ```{r f3-loocv, eval=FALSE,fig.width=5.5,fig.height=9}
 
-loocv_df <- read_rds("data/generated_data/loocv_df.rds")
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv_df.rds")
 
 
 f3a <- loocv_df %>%
+        filter(cohort=="SMIC/PIC") %>%
         ggplot()+ 
-        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=variables),labels=FALSE,n.cuts=0)+ 
+        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=paste(variables,base_data_name)),labels=FALSE,n.cuts=0)+ 
         geom_abline(lty=3,col="grey50")+
         xlab("False Positivity Rate")+
         ylab("True Positivity Rate")+
         scale_color_brewer("Model",palette ="Dark2")+
-        theme_cowplot()+
-        theme(legend.position = "none")
-
-plotROC::calc_auc(f3a)
+        theme_cowplot()#+
+        #theme(legend.position = "none")
 
 
 f3b <- loocv_df %>%
-        group_by(variables,day,status)%>%
+        filter(base_data_name=="all_fitdata")%>%
+        ggplot()+ 
+        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=paste(variables,base_data_name)),labels=FALSE,n.cuts=0)+ 
+        geom_abline(lty=3,col="grey50")+
+        xlab("False Positivity Rate")+
+        ylab("True Positivity Rate")+
+        scale_color_brewer("Model",palette ="Dark2")+
+        theme_cowplot()#+
+        #theme(legend.position = "none")
+
+plotROC::calc_auc(f3a)
+plotROC::calc_auc(f3b)
+
+
+loocv_df %>%
+        filter(status=="Case")%>%
+        group_by(variables,day,base_data_name,status)%>%
         summarize(seropos=mean(spec95_seropos)) %>%
         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
         geom_col(position=position_dodge2())+
-        facet_grid(.~status,scales="free_x",space="free")+
+        facet_grid(status~paste(variables,base_data_name),scales="free_x",space="free")+
         geom_hline(yintercept = 0.05,lty=2)+
         theme_cowplot()+
         xlab("Day")+
@@ -336,35 +351,78 @@ f3b <- loocv_df %>%
         theme(axis.text.x = element_text(hjust=1,angle=45),
               legend.position = "none")
 
-
-external_df <- read_rds("data/generated_data/external_df.rds")
-
-
-f3c <- external_df %>%
-        filter(training_set == "Vax included" | variables=="Reduced IgG Panel") %>%
-        mutate(variables=ifelse(training_set=="No vax included",
-                                "Original",variables
-                                )) %>%
-        group_by(variables,day,cohort)%>%
+loocv_df %>%
+        filter(status=="Vaccinee")%>%
+        filter(base_data_name=="all_fitdata")%>%
+        group_by(variables,day,base_data_name,status)%>%
         summarize(seropos=mean(spec95_seropos)) %>%
-        mutate(variables=factor(variables,
-                                levels=c(
-                                         
-                                         "All Variables",
-                                         "Reduced IgG Panel",
-                                         "Original"
-                                         ))) %>%
-        mutate(variables=fct_rev(variables))%>%
         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
         geom_col(position=position_dodge2())+
+        facet_grid(status~paste(variables,base_data_name),scales="free_x",space="free")+
         geom_hline(yintercept = 0.05,lty=2)+
         theme_cowplot()+
         xlab("Day")+
-        ylab("Seropositivity"               )+
-        scale_fill_brewer("Model",palette="Dark2",direction = -1)+
-        theme(axis.text.x = element_text(hjust=1,angle=45))
+        ylab("Seropositivity")+
+        scale_fill_brewer("Model",palette="Dark2")+
+        theme(axis.text.x = element_text(hjust=1,angle=45),
+              legend.position = "none")
 
-plot_grid(f3a,f3b, f3c, ncol = 1,labels = c("A","B","C"))
+# f3a <- loocv_df %>%
+#         ggplot()+ 
+#         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=variables),labels=FALSE,n.cuts=0)+ 
+#         geom_abline(lty=3,col="grey50")+
+#         xlab("False Positivity Rate")+
+#         ylab("True Positivity Rate")+
+#         scale_color_brewer("Model",palette ="Dark2")+
+#         theme_cowplot()+
+#         theme(legend.position = "none")
+# 
+# plotROC::calc_auc(f3a)
+# 
+# 
+# f3b <- loocv_df %>%
+#         group_by(variables,day,status)%>%
+#         summarize(seropos=mean(spec95_seropos)) %>%
+#         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
+#         geom_col(position=position_dodge2())+
+#         facet_grid(.~status,scales="free_x",space="free")+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme_cowplot()+
+#         xlab("Day")+
+#         ylab("Seropositivity")+
+#         scale_fill_brewer("Model",palette="Dark2")+
+#         theme(axis.text.x = element_text(hjust=1,angle=45),
+#               legend.position = "none")
+# 
+# 
+# external_df <- read_rds("data/generated_data/external_df.rds")
+# 
+# 
+# f3c <- external_df %>%
+#         filter(training_set == "Vax included" | variables=="Reduced IgG Panel") %>%
+#         mutate(variables=ifelse(training_set=="No vax included",
+#                                 "Original",variables
+#                                 )) %>%
+#         group_by(variables,day,cohort)%>%
+#         summarize(seropos=mean(spec95_seropos)) %>%
+#         mutate(variables=factor(variables,
+#                                 levels=c(
+#                                          
+#                                          "All Variables",
+#                                          "Reduced IgG Panel",
+#                                          "Original"
+#                                          ))) %>%
+#         mutate(variables=fct_rev(variables))%>%
+#         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
+#         geom_col(position=position_dodge2())+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme_cowplot()+
+#         xlab("Day")+
+#         ylab("Seropositivity"               )+
+#         scale_fill_brewer("Model",palette="Dark2",direction = -1)+
+#         theme(axis.text.x = element_text(hjust=1,angle=45))
+# 
+# plot_grid(f3a,f3b, f3c, ncol = 1,labels = c("A","B","C"))
 
 ```
 
