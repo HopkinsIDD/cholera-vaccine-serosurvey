@@ -6,7 +6,7 @@ source("code/R/utils.R")
 final_wide <- read_rds("data/generated_data/analysis_data/final_wide.rds")
 
 
-path <- "source/final_code/vax_strategy/generated_rds/fpr-estimates/"
+# path <- "source/final_code/vax_strategy/generated_rds/fpr-estimates/"
 tree_param <- 1000
 library(rstanarm)
 library(tidybayes)
@@ -164,10 +164,76 @@ for(t in c(45,120,200,300)){
         # }
 }
 
-write_rds(raw_df, "data/generated_data/misclassify_df2.rds")
+write_rds(raw_df, "data/generated_data/analysis_objects/misclassification/misclassify_df.rds")
 
 
-#model the the estimates using brms
+#model the the estimates using
+options(mc.cores = 1)
+
+
+tvfpr_fit <- list()
+tvfpr_df <- data.frame()
+
+raw_df_list <- list(
+        
+        `Bangladeshi <10 years` = filter(raw_df, cohort=="BGD Vaccinee") %>%
+                filter(age<10),
+        `Bangladeshi 10+ years`= filter(raw_df, cohort=="BGD Vaccinee") %>%
+                filter(age>=10),
+        `Haitian 18+ years` = filter(raw_df, cohort=="HTI Vaccinee") ,
+        
+        `All Vaccinees` = raw_df
+        
+)
+
+for(t in c(45,120,200,300)){
+        for(dat in names(raw_df_list)){
+                
+                
+                
+                
+                cat("Window: ",t, " Population: ",dat,"\n")  
+                
+                # estimate time-varying sensitivity
+                tvfpr_tmp <- fit_tvfpr(data = raw_df_list[[dat]] %>%
+                                               filter(end_window==t),
+                                       end_window=t,
+                                       seropos_type= "spec95_seropos",
+                                       last_time = 365,
+                                       curve="cubic"
+                )
+                
+                tvfpr_fit[[as.character(t)]][[dat]] <- tvfpr_tmp
+                
+                tmp_df<- tvfpr_tmp$summary_df 
+                
+                if(!is.null(tmp_df)){
+                        tmp_df<- tmp_df %>%
+                                mutate(variables="Reduced IgG Panel")%>%
+                                mutate(seropos_type="spec95_seropos") %>%
+                                mutate(end_window=t) %>%
+                                mutate(population=dat)
+                        
+                }
+                
+                
+                tvfpr_df <-bind_rows(tvfpr_df,tmp_df)
+                
+                
+        }}
+
+
+
+
+
+write_rds(tvfpr_fit,
+          paste0("data/generated_data/analysis_objects/misclassification/","tvfpr_fit.rds")
+)
+write_rds(tvfpr_df,
+          paste0("data/generated_data/analysis_objects/misclassification/","tvfpr_df.rds")
+)
+
+
 
 
 #new idea

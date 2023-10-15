@@ -4128,7 +4128,7 @@ fit_tvfpr <- function(data,
         
         if(curve=="cubic"){
                 #fit the stan model
-                logitfit<- stan_glmer(
+                logitfit<- rstanarm::stan_glmer(
                         seropos_model ~ day1+day2 + day3+
                                 (1|id), 
                         data = fpr_data,
@@ -4167,7 +4167,7 @@ fit_tvfpr <- function(data,
         
         if(curve=="linear"){
                 #fit the stan model
-                logitfit<- stan_glmer(
+                logitfit<- rstanarm::stan_glmer(
                         seropos_model ~ day1+ (1|id), 
                         data = fpr_data,
                         family = binomial(link = "logit"), 

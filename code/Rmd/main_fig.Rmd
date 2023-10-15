@@ -29,7 +29,10 @@ knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,
 
 source("code/R/packages.R")
 source("code/R/utils.R")
-source("code/R/load-data.R")
+# source("code/R/load-data.R")
+
+final_df <- read_rds("data/generated_data/analysis_data/final_df.rds")
+final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
 
 
 ```
@@ -131,8 +134,8 @@ fig1_df %>%
         filter(status=="Vaccinee")  %>%
         mutate(Vaccinee=case_when(
                 cohort== "BGD Vaccinee" & age <10 ~ "Bangladeshi < 10 years",
-                cohort== "BGD Vaccine" & age>=10 ~ "Bangladeshi 10+ years",
-                TRUE ~ cohort
+                cohort== "BGD Vaccinee" & age>=10 ~ "Bangladeshi 10+ years",
+                TRUE ~ "Haitian Vaccinee 18+ years"
         )) %>%
         ggplot(aes(y=RAU_value))+
                 geom_line(aes(group=id,
@@ -183,8 +186,8 @@ source("code/R/multidimensional-scaling.R")
 
 
 #get data for misclassification
-misclassify_df2 <- read_rds("data/generated_data/misclassify_df2.rds")
-
+misclassify_df <- read_rds("data/generated_data/analysis_objects/misclassification/misclassify_df.rds")
+tvfpr_df <- read_rds("data/generated_data/analysis_objects/misclassification/tvfpr_df.rds")
 
 # f2a <- misclassify_df2 %>%
 #         filter(cohort == "BGD Vaccinee") %>%
@@ -217,7 +220,7 @@ misclassify_df2 <- read_rds("data/generated_data/misclassify_df2.rds")
 #         geom_hline(yintercept = 0.05,lty=2)+
 #         theme(legend.position = "bottom")
 
-f2a <- raw_df %>%
+f2a <- misclassify_df %>%
         group_by(day,end_window,cohort) %>%
         summarize(seropos=mean(spec95_seropos))%>%
         filter(end_window %in% c("45","120","200","300"))%>%
@@ -228,13 +231,24 @@ f2a <- raw_df %>%
                         cohort=="BGD Vaccinee" ~ "Bangladeshi",
                         cohort=="HTI Vaccinee" ~ "Haitian"
         )) %>%
-        ggplot(aes(col=Vaccinee,
-                   y=seropos,x=day))+
-        geom_point(aes(shape=Vaccinee))+
-        geom_line() +
+        ggplot()+
+        geom_point(aes(col=Vaccinee,
+                   y=seropos,x=day,shape=Vaccinee))+
+        geom_line(data=filter(tvfpr_df,population== "All Vaccinees")%>%
+                        mutate(end_window=factor(end_window,
+                                 levels=c("45","120","200","300"),
+                                 labels=c("45-day","120-day","200-day","300-day"))),
+                        aes(x=time,y=median))+
+        geom_ribbon(data=filter(tvfpr_df,population== "All Vaccinees")%>%
+                        mutate(end_window=factor(end_window,
+                                 levels=c("45","120","200","300"),
+                                 labels=c("45-day","120-day","200-day","300-day"))),
+                        aes(x=time,y=median,ymin=lb,ymax=ub),col=NA,
+                                    alpha=0.2,
+                        )+
         facet_grid(.~end_window)+
         theme_cowplot()+
-        scale_x_continuous("Infection Window (Days)",breaks=seq(0,365,90))+
+        scale_x_continuous("Days since first dose",breaks=seq(0,365,90))+
         scale_y_continuous("False Positivity Rate")+
         scale_color_manual(values = c("#003262","#FDB515"))+
         scale_shape_manual(values=c(1,1))+
@@ -242,8 +256,23 @@ f2a <- raw_df %>%
         #theme(legend.position = "none")
 
 
+
+        
+        # ggplot(aes(
+        #            ))+
+        # geom_ribbon(aes(ymin=lb,ymax=ub),col=NA,
+        #                             alpha=0.5,
+        #                 ) +
+        # facet_wrap(.~fct_rev(population))+
+        # xlab("Days since first dose")+
+        # scale_y_continuous("False Positivity Rate",limits=c(0,0.4))+
+        # scale_fill_brewer("Infection Window (Days)",palette = "Dark2")+
+        # scale_color_brewer("Infection Window (Days)",palette = "Dark2")+
+        # theme_cowplot()+
+        # geom_hline(yintercept = 0.05,lty=2)
+
 #get mds measurements
-mds_obj <- read_rds("data/generated_data/mds_obj.rds")
+mds_obj <- read_rds("data/generated_data/analysis_objects/mds_obj.rds")
 
 
 f2b <- mds_obj  %>%
@@ -275,7 +304,7 @@ plot_grid(f2a,f2b,ncol=1,
 
 ## Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days). 
 
-```{r f3-loocv, eval=TRUE,fig.width=5.5,fig.height=9}
+```{r f3-loocv, eval=FALSE,fig.width=5.5,fig.height=9}
 
 loocv_df <- read_rds("data/generated_data/loocv_df.rds")
 
@@ -341,7 +370,7 @@ plot_grid(f3a,f3b, f3c, ncol = 1,labels = c("A","B","C"))
 
 ## Figure 4: Model performance to distinguish recently infected individuals, recently vaccinated individuals, and individuals neither recently infected nor vaccinated
 
-```{r f4-three-class, eval=TRUE,fig.width=5.5,fig.height=9}
+```{r f4-three-class, eval=FALSE,fig.width=5.5,fig.height=9}
 
 confusion_matrix_df <- read_rds("data/generated_data/loocv_3class_df.rds") %>%
         count(variables,three_class,prediction) %>%
