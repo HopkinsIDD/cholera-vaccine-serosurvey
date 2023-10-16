@@ -33,7 +33,7 @@ t <-200
 
 
 loocv_list <- list()
-raw_df <- data.frame()
+loocv_df <- data.frame()
 
 for(v in 1:length(var_list)){
         for (q in names(data_list)){
@@ -92,7 +92,9 @@ for(v in 1:length(var_list)){
                         
                         
                         #find the cutoff for each 
-                        performance <-  outside_df %>% addInfectionWindow(end_window=t) %>%
+                        performance <-  outside_df %>%
+                                filter(cohort %in% c("SMIC/PIC")) %>%
+                                addInfectionWindow(end_window=t) %>%
                                 getPerf_ranger(inside_fit,paste0("inf_",t)#,
                                                # spec=train_spec_cutoff
                                 )
@@ -185,10 +187,10 @@ for(v in 1:length(var_list)){
                 )
                 
                 loocv_list[[names(var_list)[v]]][[q]][[i]] <- out_tmp
-                raw_df <- bind_rows(raw_df,fpr_df)
+                loocv_df <- bind_rows(loocv_df,fpr_df)
                 
                 
-                write_rds(raw_df, "data/generated_data/analysis_objects/loocv_df.rds")
+                write_rds(loocv_df, "data/generated_data/analysis_objects/loocv/loocv_df.rds")
                 
                 
                 
@@ -196,7 +198,116 @@ for(v in 1:length(var_list)){
 
 
 
-write_rds(raw_df, "data/generated_data/analysis_objects/loocv_df.rds")
+#model the the time varying estimates using loocv data
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv_df_SMICPIC.rds")
+options(mc.cores = 1)
+
+
+loocv_tvfit_list <- list()
+loocv_tvfit_df <- data.frame()
+
+models_df <- distinct(loocv_df, variables,base_data_name,status) %>%
+        filter(status %in% c("Case","Vaccinee"))
+
+
+for(m in 1:nrow(models_df)){
+
+                this_model <- models_df[m,]
+                this_model_name <- models_df[m,c("variables","base_data_name")] %>% unlist() %>% paste0(collapse=" with ")
+                this_data <- left_join(this_model,loocv_df, by = c("status", "variables", "base_data_name"))                 
+                
+                cat("Model: ",this_model_name, " Population: ",this_model$status,"\n")  
+                
+                # estimate time-varying sensitivity
+                tvfpr_tmp <- fit_tvfpr(data = this_data,
+                                       end_window=200,
+                                       seropos_type= "spec95_seropos",
+                                       last_time = if(this_model$status=="Case") 900 else 365,
+                                       curve="cubic"
+                )
+                
+                loocv_tvfit_list[[this_model$variables]][[this_model$base_data_name]][["200-day"]][[this_model$status]] <- tvfpr_tmp
+                
+                tmp_df<- tvfpr_tmp$summary_df 
+                
+                if(!is.null(tmp_df)){
+                        tmp_df<- tmp_df %>%
+                                mutate(variables=this_model$variables)%>%
+                                mutate(base_data_name=this_model$base_data_name)%>%
+                                mutate(seropos_type="spec95_seropos") %>%
+                                mutate(end_window=200) %>%
+                                mutate(population=this_model$status)
+                        
+                }
+                
+                
+                loocv_tvfit_df <-bind_rows(loocv_tvfit_df,tmp_df)
+                
+                
+}
+
+
+write_rds(loocv_tvfit_list,
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_list_SMICPIC.rds")
+)
+write_rds(loocv_tvfit_df,
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_df_SMICPIC.rds")
+)
+
+#model the specificity 
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds")
+options(mc.cores = 1)
+
+
+loocv_spec_list <- list()
+loocv_spec_df <- data.frame()
+
+models_spec_df <- distinct(loocv_df, variables,base_data_name)
+data_spec_list <- list(
+                `Outside Window` = filter(loocv_df, cohort=="SMIC/PIC",inf_200==0),
+                Vaccinee = filter(loocv_df, status=="Vaccinee")
+                )
+
+for(m in 1:nrow(models_spec_df)){
+        for(set in names(data_spec_list)){
+                this_model <- models_spec_df[m,]
+                this_model_name <- models_spec_df[m,] %>% unlist() %>% paste0(collapse=" with ")
+                this_data <- left_join(this_model,data_spec_list[[set]],by = c("variables", "base_data_name"))  
+                
+                if(nrow(this_data)>1){
+                        
+                        cat("Model: ",this_model_name, " Population: ",set,"\n")  
+                        
+                        # estimate specificity
+                        spec_tmp <- fit_spec(this_data,
+                                             end_window=200,
+                                             seropos_type= "spec95_seropos")
+                        
+                        
+                        loocv_spec_list[[this_model$variables]][[this_model$base_data_name]][["200-day"]][[set]] <- spec_tmp
+                        
+                        tmp_df<- spec_tmp$summary_df %>%
+                                mutate(variables=this_model$variables)%>%
+                                mutate(base_data_name=this_model$base_data_name)%>%
+                                mutate(seropos_type="spec95_seropos") %>%
+                                mutate(end_window=200) %>%
+                                mutate(population=set)
+                        
+                        loocv_spec_df <-bind_rows(loocv_spec_df,tmp_df)
+                        
+                        
+                }                
+        }
+}
+
+write_rds(loocv_spec_list,
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_list.rds")
+)
+
+write_rds(loocv_spec_df,
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_df.rds")
+)
+
 
 
 # #get fit data

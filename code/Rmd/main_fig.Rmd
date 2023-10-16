@@ -4,7 +4,7 @@ author: "Forrest Jones"
 date: "`r Sys.Date()`"
 output:
   html_document:
-    self_contained: no
+    self_contained: yes
   word_document: default 
 ---
 
@@ -16,8 +16,9 @@ library(knitr)
 knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,
                       cache = TRUE,
                       fig.height = 7,
-                      fig.width = 10, eval=FALSE,
-                      dev="pdf" )
+                      fig.width = 10, eval=FALSE#,
+                      #dev="pdf" 
+                      )
 
 ```
 
@@ -26,6 +27,7 @@ knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,
 
 
 ```{r load, eval = TRUE}
+rm(list=ls())
 
 source("code/R/packages.R")
 source("code/R/utils.R")
@@ -243,17 +245,19 @@ f2a <- misclassify_df %>%
                         mutate(end_window=factor(end_window,
                                  levels=c("45","120","200","300"),
                                  labels=c("45-day","120-day","200-day","300-day"))),
-                        aes(x=time,y=median,ymin=lb,ymax=ub),col=NA,
+                        aes(x=time,ymin=lb,ymax=ub),col=NA,
                                     alpha=0.2,
                         )+
         facet_grid(.~end_window)+
         theme_cowplot()+
         scale_x_continuous("Days since first dose",breaks=seq(0,365,90))+
-        scale_y_continuous("False Positivity Rate")+
+        scale_y_continuous("Proportion Seropositive")+
         scale_color_manual(values = c("#003262","#FDB515"))+
         scale_shape_manual(values=c(1,1))+
-        geom_hline(yintercept = 0.05,lty=2)#+
-        #theme(legend.position = "none")
+        geom_hline(yintercept = 0.05,lty=2)+
+        theme(legend.position = "none")
+
+
 
 
 
@@ -304,68 +308,176 @@ plot_grid(f2a,f2b,ncol=1,
 
 ## Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days). 
 
-```{r f3-loocv, eval=FALSE,fig.width=5.5,fig.height=9}
+```{r f3-loocv, eval=TRUE,fig.width=6,fig.height=10}
 
-loocv_df <- read_rds("data/generated_data/analysis_objects/loocv_df.rds")
+f3_loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds") %>%
+        filter(base_data_name!="bgd_fitdata")%>%
+        filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
+        mutate(new_modelname=case_when(
+                base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
+                base_data_name == "all_fitdata" &variables == "Reduced IgG Panel" ~ "Alternative Model 1",
+                base_data_name == "all_fitdata" &variables == "All Variables"~ "Alternative Model 2"
+        )) %>%
+        mutate(new_modelname=factor(new_modelname,levels=c(
+                                                           "Alternative Model 1",
+                                                           "Alternative Model 2",
+                                                           "Original Model"
+                                                           ))) 
 
 
-f3a <- loocv_df %>%
+f3_tvfit_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_df_SMICPIC.rds") %>%
+        filter(base_data_name!="bgd_fitdata")%>%
+        filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
+        mutate(new_modelname=case_when(
+                base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
+                base_data_name == "all_fitdata" &variables == "Reduced IgG Panel" ~ "Alternative Model 1",
+                base_data_name == "all_fitdata" &variables == "All Variables"~ "Alternative Model 2"
+        )) %>%
+        mutate(new_modelname=factor(new_modelname,levels=c(
+                                                           "Alternative Model 1",
+                                                           "Alternative Model 2",
+                                                           "Original Model"
+                                                           ))) 
+
+f3_spec_df <- read_rds( paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_df.rds"))%>%
+        filter(base_data_name!="bgd_fitdata")%>%
+        filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
+        mutate(new_modelname=case_when(
+                base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
+                base_data_name == "all_fitdata" &variables == "Reduced IgG Panel" ~ "Alternative Model 1",
+                base_data_name == "all_fitdata" &variables == "All Variables"~ "Alternative Model 2"
+        )) %>%
+        mutate(new_modelname=factor(new_modelname,levels=c(
+                                                           "Alternative Model 1",
+                                                           "Alternative Model 2",
+                                                           "Original Model"
+                                                           ))) %>%
+        mutate(population=ifelse(
+                population =="Vaccinee",
+                "Vaccinated", "Unvaccinated"
+
+        )) 
+
+
+
+f3a <- f3_loocv_df %>%
         filter(cohort=="SMIC/PIC") %>%
-        ggplot()+ 
-        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=paste(variables,base_data_name)),labels=FALSE,n.cuts=0)+ 
+        ggplot(alpha=0.7)+ 
+        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=new_modelname),labels=FALSE,n.cuts=0)+ 
         geom_abline(lty=3,col="grey50")+
         xlab("False Positivity Rate")+
         ylab("True Positivity Rate")+
         scale_color_brewer("Model",palette ="Dark2")+
-        theme_cowplot()#+
-        #theme(legend.position = "none")
+        theme_cowplot()
 
-
-f3b <- loocv_df %>%
+f3b <- f3_loocv_df %>%
         filter(base_data_name=="all_fitdata")%>%
         ggplot()+ 
-        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=paste(variables,base_data_name)),labels=FALSE,n.cuts=0)+ 
+        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)),
+                              col=new_modelname),labels=FALSE,n.cuts=0
+                          )+ 
         geom_abline(lty=3,col="grey50")+
         xlab("False Positivity Rate")+
         ylab("True Positivity Rate")+
         scale_color_brewer("Model",palette ="Dark2")+
-        theme_cowplot()#+
-        #theme(legend.position = "none")
+        theme_cowplot()
 
 plotROC::calc_auc(f3a)
 plotROC::calc_auc(f3b)
 
+f3c <- f3_loocv_df %>%
+        filter(inf_200==1)%>%
+        group_by(new_modelname,day) %>%
+        summarize(seropos=mean(spec95_seropos))  %>%      
+        ggplot(aes(col=new_modelname,fill=new_modelname))+
+                geom_point(aes(x=day,y=seropos),shape=1)+
+                geom_line(data=filter(f3_tvfit_df,population== "Case",time<200),aes(x=time,y=median))+
+                geom_ribbon(data=filter(f3_tvfit_df,population== "Case",time<200),
+                            aes(x=time,ymin=lb,ymax=ub),col=NA,
+                                            alpha=0.2
+                                )+
+                facet_grid(.~new_modelname,scales="free_x",space="free")+
+                scale_color_brewer("Model",palette ="Dark2")+
+                scale_fill_brewer("Model",palette ="Dark2")+
+                cowplot::theme_cowplot()+
+                ylab("Sensitivity")+
+                xlab("Days after symptom onset")
 
-loocv_df %>%
-        filter(status=="Case")%>%
-        group_by(variables,day,base_data_name,status)%>%
-        summarize(seropos=mean(spec95_seropos)) %>%
-        ggplot(aes(x=factor(day),fill=variables,y=seropos))+
-        geom_col(position=position_dodge2())+
-        facet_grid(status~paste(variables,base_data_name),scales="free_x",space="free")+
-        geom_hline(yintercept = 0.05,lty=2)+
-        theme_cowplot()+
-        xlab("Day")+
-        ylab("Seropositivity")+
-        scale_fill_brewer("Model",palette="Dark2")+
-        theme(axis.text.x = element_text(hjust=1,angle=45),
-              legend.position = "none")
+f3d <- f3_spec_df %>%
+        ggplot()+
+                geom_point(aes(x=population,y=median,col=new_modelname))+
+                geom_linerange(aes(x=population,ymin=lb,ymax=ub,col=new_modelname))+
+                scale_color_brewer("Model",palette ="Dark2")+
+                cowplot::theme_cowplot()+
+                geom_hline(yintercept = 0.95,lty=2)+
+        facet_grid(.~new_modelname,scales="free_x")+
+        theme(axis.text.x = element_text(angle=45,hjust = 1))+
+        scale_y_continuous("Specificity",limits=c(0.85,1))+
+        xlab("Population")
+        
 
-loocv_df %>%
-        filter(status=="Vaccinee")%>%
-        filter(base_data_name=="all_fitdata")%>%
-        group_by(variables,day,base_data_name,status)%>%
-        summarize(seropos=mean(spec95_seropos)) %>%
-        ggplot(aes(x=factor(day),fill=variables,y=seropos))+
-        geom_col(position=position_dodge2())+
-        facet_grid(status~paste(variables,base_data_name),scales="free_x",space="free")+
-        geom_hline(yintercept = 0.05,lty=2)+
-        theme_cowplot()+
-        xlab("Day")+
-        ylab("Seropositivity")+
-        scale_fill_brewer("Model",palette="Dark2")+
-        theme(axis.text.x = element_text(hjust=1,angle=45),
-              legend.position = "none")
+plot_grid(f3a+ggtitle("Cases and uninfected\ncontacts only")+
+                  theme(legend.position = c(0.25,0.4),
+                        legend.background = element_rect(fill = "white",color = "black"))
+                  ,
+          f3b+ggtitle("All samples")+
+                  theme(legend.position ="none"),nrow=1,align="h",
+                  labels = c("A","B")) %>%
+        plot_grid(f3c+theme(legend.position ="none"),
+                  f3d+theme(legend.position ="none"),ncol=1,
+                  labels = c("","C","D")
+                  )
+
+
+# loocv_df %>%
+#         filter(status=="Case")%>%
+#                 filter(base_data_name!="bgd_fitdata")%>%
+#         group_by(variables,day,base_data_name,status,inf_200)%>%
+#         summarize(seropos=mean(spec95_seropos)) %>%
+#         ggplot(aes(x=factor(day),fill=inf_200,y=seropos))+
+#         geom_col(position=position_dodge2())+
+#         facet_grid(paste(variables,base_data_name)~.,scales="free_x",space="free")+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme_cowplot()+
+#         xlab("Day")+
+#         ylab("Seropositivity")+
+#         scale_fill_brewer("Model",palette="Dark2")+
+#         theme(axis.text.x = element_text(hjust=1,angle=45),
+#               legend.position = "none")
+# 
+# 
+# 
+# loocv_df %>%
+#         filter(status=="Vaccinee")%>%
+#         filter(base_data_name=="all_fitdata")%>%
+#         group_by(variables,day,base_data_name,status)%>%
+#         summarize(seropos=mean(spec95_seropos)) %>%
+#         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
+#         geom_col(position=position_dodge2())+
+#         facet_grid(status~paste(variables,base_data_name),scales="free_x",space="free")+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme_cowplot()+
+#         xlab("Day")+
+#         ylab("Seropositivity")+
+#         scale_fill_brewer("Model",palette="Dark2")+
+#         cowplot::theme_cowplot()+
+#         theme(axis.text.x = element_text(hjust=1,angle=45),
+#               legend.position = "none")
+# 
+# filter(loocv_tvfit_df,population== "Vaccinee") %>%
+#         filter(base_data_name!="bgd_fitdata")%>%
+#         ggplot()+
+#                 geom_line(aes(x=time,y=median,col=paste(base_data_name,variables)))+
+#                 geom_ribbon( aes(x=time,y=median,ymin=lb,ymax=ub,fill=paste(base_data_name,variables)),col=NA,
+#                                             alpha=0.2
+#                                 )+
+#                 cowplot::theme_cowplot()+
+#                 geom_hline(yintercept = 0.05,lty=2)+
+#                 scale_y_continuous(limits=c(0,1))+
+#         xlab("Day")+
+#         ylab("Seropositivity")
+        
+                #geom_vline(xintercept = 200)
 
 # f3a <- loocv_df %>%
 #         ggplot()+ 
