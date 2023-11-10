@@ -389,5 +389,24 @@ clean_sample_data <- sample_data %>%
 write_rds(clean_sample_data,'data/generated_data/quality_control/clean_sample_data.rds')
 
 
+#get a full dataset of all the MFIs
+full_mfi <- data.frame()
+
+for(i in 1:nrow(batches)){
+
+        cat(batches$batch[i],"\n")
+        
+        this_batch<- batches$batch[i]
+        this_merge <- glue::glue("{match_dir_path}{this_batch}/{this_batch}_merge.rds") %>%
+                read_rds()
+        
+        this_mfi <- this_merge$extract_merge
+        
+        full_mfi <- bind_rows(full_mfi,this_mfi)
+
+}
+
+write_rds(full_mfi,"data/generated_data/quality_control/complete_raw_data.rds")
+
 
 
