@@ -1,5 +1,6 @@
 
 library(tidyverse)
+library(tidybayes)
 
 simulate_serosurvey_novax <- function(n_sim, n_survey=1000, sens_df,spec_df,incidence){
       
