@@ -269,14 +269,251 @@ bind_rows(
       facet_wrap(.~coverage,nrow=1)
 
 
+##### get new sens_df objects and spec_obj
+
+
+loocv_spec_list <- read_rds(
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_list.rds")
+)
+
+new_spec_obj<- loocv_spec_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$`Outside Window`$fit%>% 
+        spread_draws(`(Intercept)`,
+                     b[term,group]) %>%
+        mutate(logit_theta_j=`(Intercept)` + b
+        ) %>%
+        mutate(theta_j = 1/(1+exp(-logit_theta_j))) %>%
+        group_by(group)%>%
+        summarize(theta=mean(theta_j),n()) %>%
+        rename(neg_ID=group
+               ) %>%
+        mutate(ind_spec=1-theta)
+
+new_spec_obj %>%
+        ggplot(aes(x=ind_spec))+
+        geom_histogram()+
+        xlab("specificity")
+
+new_spec_estim <- mean(new_spec_obj$ind_spec)
+
+
+new_spec_obj$ind_spec %>% hist()
+
+
+loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list_SMICPIC.rds")
+
+sens_fitdata <-loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$data
+sens_spread <- loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$fit %>% 
+        spread_draws(`(Intercept)`,
+                     b[term,group],
+                     day1,day2,day3
+        )
+
+new_sens_obj <- data.frame()
+
+for(t in 1:200){
+        
+        time <- log(t) -mean(log(sens_fitdata$new_day))
+        
+        tmp_df <- sens_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(group) %>%
+                summarize(theta=mean(theta_j),n()) %>% #average across individuals here
+                mutate(days_ago=t)%>%
+                rename(pos_ID=group,
+                       ind_sens=theta
+                )
+        
+        new_sens_obj <- bind_rows(new_sens_obj,tmp_df)
+}
+
+new_sens_obj %>%
+        ggplot(aes(x=days_ago,y=ind_sens,group=pos_ID))+
+                geom_line() +
+        xlab("Days since infection")+
+        ylab("sensitivity")
+
+new_sens_estim <- new_sens_obj %>%
+        group_by(days_ago)%>%
+        summarize(sens=mean(ind_sens))%>%
+        pull(sens) %>%
+        mean()
 
 
 
-mean(vax_run$sim1$seropos)
-(mean(vax_run$sim1$seropos) + spec_estim-1)/(sens_estim + spec_estim - 1)
-mean(vax_run$sim1$R) 
+
+run_1 <- simulate_serosurvey_novax(n_sim = 100,
+                                   n_survey = 1000,
+                                   sens_df=new_sens_obj,spec_df=new_spec_obj,
+                                   incidence=0.01)
+
+run_5 <- simulate_serosurvey_novax(n_sim = 100,
+                                   n_survey = 1000,
+                                   sens_df=new_sens_obj,spec_df=new_spec_obj,
+                                   incidence=0.05)
+
+run_10 <- simulate_serosurvey_novax(n_sim = 100,
+                                    n_survey = 1000,
+                                    sens_df=new_sens_obj,spec_df=new_spec_obj,
+                                    incidence=0.10)
+run_20 <- simulate_serosurvey_novax(n_sim = 100,
+                                    n_survey = 1000,
+                                    sens_df=new_sens_obj,spec_df=new_spec_obj,
+                                    incidence=0.20)
 
 
+bind_rows(
+        bind_rows(run_1,.id="simulation"),
+        bind_rows(run_5,.id="simulation"),
+        bind_rows(run_10,.id="simulation"),
+        bind_rows(run_20,.id="simulation")
+) %>%
+        group_by(simulation,incidence) %>%
+        summarize(
+                crude_seropos=mean(seropos),
+                true_inc=mean(R)
+        ) %>%
+        mutate(adjusted_seropos=(crude_seropos + new_spec_estim-1)/(new_sens_estim + new_spec_estim - 1)) %>%
+        mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
+        gather(type,percent,-c(simulation,incidence)) %>%
+        ggplot(aes(y=percent,x=type,col=type))+
+        ggbeeswarm::geom_beeswarm()+
+        geom_hline(aes(yintercept=incidence),lty=2)+
+        facet_wrap(.~incidence,nrow=1)+
+        theme(axis.text.x = element_text(angle=45,hjust=1))
 
 
+#### new vax_obj
+tvfpr_fit <- read_rds("data/generated_data/analysis_objects/misclassification/tvfpr_fit.rds")
+
+vax_fitdata <-tvfpr_fit$`200`$`All Vaccinees`$data
+vax_spread <- tvfpr_fit$`200`$`All Vaccinees`$fit%>% 
+        spread_draws(`(Intercept)`,
+                     b[term,group],
+                     day1,day2,day3
+        )
+
+
+new_vax_tv_obj <- data.frame()
+
+for(t in 1:365){
+        
+        time <- log(t) -mean(log(vax_fitdata$new_day))
+        
+        tmp_df <- vax_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(group) %>%
+                summarize(theta=mean(theta_j),n()) %>% #average across individuals here
+                mutate(days_ago=t)%>%
+                rename(vax_ID=group) %>%
+                mutate(ind_spec=1-theta)
+        
+        new_vax_tv_obj <- bind_rows(new_vax_tv_obj,tmp_df)
+}
+
+
+new_vax_tv_obj %>%
+        ggplot(aes(x=days_ago,y=ind_spec,group=vax_ID))+
+        geom_line()+
+        ylab("Specificity")+
+        xlab("Days since vaccination")
+
+
+new_vax_21 <- new_vax_tv_obj %>%
+        filter(days_ago==21)%>%
+        select(-days_ago)
+
+new_vax_120 <- new_vax_tv_obj %>%
+        filter(days_ago==120)%>%
+        select(-days_ago)
+
+vax21_run_25 <- simulate_serosurvey_vax(n_sim = 100,
+                                      n_survey = 1000,
+                                      sens_df=new_sens_obj,
+                                      spec_df=new_spec_obj,
+                                      vax_df = new_vax_21,
+                                      coverage=0.25,
+                                      incidence=0.05
+) 
+
+vax21_run_50 <- simulate_serosurvey_vax(n_sim = 10,
+                                      n_survey = 1000,
+                                      sens_df=new_sens_obj,
+                                      spec_df=new_spec_obj,
+                                      vax_df = new_vax_21,
+                                      coverage=0.5,
+                                      incidence=0.05
+)
+
+vax21_run_75 <- simulate_serosurvey_vax(n_sim = 10,
+                                      n_survey = 1000,
+                                      sens_df=new_sens_obj,
+                                      spec_df=new_spec_obj,
+                                      vax_df = new_vax_21,
+                                      coverage=0.75,
+                                      incidence=0.05
+)
+
+vax120_run_25 <- simulate_serosurvey_vax(n_sim = 100,
+                                        n_survey = 1000,
+                                        sens_df=new_sens_obj,
+                                        spec_df=new_spec_obj,
+                                        vax_df = new_vax_120,
+                                        coverage=0.25,
+                                        incidence=0.05
+) 
+
+vax120_run_50 <- simulate_serosurvey_vax(n_sim = 100,
+                                        n_survey = 1000,
+                                        sens_df=new_sens_obj,
+                                        spec_df=new_spec_obj,
+                                        vax_df = new_vax_120,
+                                        coverage=0.5,
+                                        incidence=0.05
+)
+
+vax120_run_75 <- simulate_serosurvey_vax(n_sim = 100,
+                                        n_survey = 1000,
+                                        sens_df=new_sens_obj,
+                                        spec_df=new_spec_obj,
+                                        vax_df = new_vax_120,
+                                        coverage=0.75,
+                                        incidence=0.05
+)
+
+
+bind_rows(
+        bind_rows(vax21_run_25,.id="simulation") %>% mutate(campaign_day="21 days prior"),
+        bind_rows(vax21_run_50,.id="simulation")%>% mutate(campaign_day="21 days prior"),
+        bind_rows(vax21_run_75,.id="simulation")%>% mutate(campaign_day="21 days prior"),
+        bind_rows(vax120_run_25,.id="simulation")%>% mutate(campaign_day="120 days prior"),
+        bind_rows(vax120_run_50,.id="simulation")%>% mutate(campaign_day="120 days prior"),
+        bind_rows(vax120_run_75,.id="simulation")%>% mutate(campaign_day="120 days prior")
+)%>%
+        group_by(simulation,incidence,coverage,campaign_day) %>%
+        summarize(
+                crude_seropos=mean(seropos),
+                true_inc=mean(R)
+        ) %>%
+        mutate(adjusted_seropos=(crude_seropos + new_spec_estim-1)/(new_sens_estim + new_spec_estim - 1)) %>%
+        mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
+        mutate(adjusted_seropos=ifelse(adjusted_seropos>1,1,adjusted_seropos)) %>%
+        gather(type,percent,-c(simulation,incidence,coverage,campaign_day)) %>%
+        ggplot(aes(y=percent,x=type,col=type))+
+        ggbeeswarm::geom_beeswarm()+
+        geom_hline(aes(yintercept=incidence),lty=2)+
+        facet_grid(campaign_day~coverage)+
+        theme(axis.text.x = element_text(angle=45,hjust=1))+
+        ylab("Seroprevalence")
 
