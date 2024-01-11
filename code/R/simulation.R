@@ -518,3 +518,136 @@ bind_rows(
         theme(axis.text.x = element_text(angle=45,hjust=1))+
         ylab("Seroprevalence")
 
+##### New stan fitting of simulations
+
+#specificity (non vax)
+
+spec_dist <- loocv_spec_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$`Outside Window`$fit%>% 
+        spread_draws(`(Intercept)`,
+                     b[term,group]) %>%
+        mutate(logit_theta_j=`(Intercept)` + b
+        ) %>%
+        mutate(theta_j = 1/(1+exp(-logit_theta_j)))  %>%
+        group_by(.draw) %>%
+        summarize(spec=1-mean(theta_j))
+        
+spec_beta <- MASS::fitdistr(spec_dist$spec,
+        densfun = "beta", list(shape1=1,shape2=1))
+
+# sensitivity
+
+sens_beta_draws <-data.frame()
+
+for(t in 1:200){
+        
+        cat(t,"\n")
+        
+        time <- log(t) -mean(log(sens_fitdata$new_day))
+        
+        tmp_dist <- sens_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(.draw) %>%
+                summarize(theta=mean(theta_j),n()) %>%
+                mutate(days_ago=t)
+        
+        
+        
+        sens_beta_draws <-bind_rows(
+                        sens_beta_draws,
+                        tmp_dist
+        )
+}
+
+
+
+sens_beta <- sens_beta_draws %>% group_by(.draw)%>%
+                        summarize(sens=mean(theta)) %>%
+                        pull(sens) %>%
+                MASS::fitdistr(
+                            densfun = "beta", list(shape1=1,shape2=1))
+
+### specificity for vaccinees
+
+
+vax_beta_draws <- data.frame()
+vax_beta <- data.frame()
+
+for(t in c(21,45,90,120,180)){
+        cat(t,"\n")
+        
+        time <- log(t) -mean(log(vax_fitdata$new_day))
+        
+        tmp_df <- vax_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(.draw) %>%
+                summarize(theta=1-mean(theta_j),n()) %>% #average across individuals here
+                mutate(days_ago=t)
+        
+        vax_beta_draws <- bind_rows(vax_beta_draws,tmp_df)
+        
+        tmp_beta <- tmp_df$theta %>%
+                MASS::fitdistr(
+                        densfun = "beta", list(shape1=1,shape2=1))
+        
+        vax_beta <- bind_rows(vax_beta,
+                              tmp_beta$estimate %>% as.matrix()%>%
+                                      t() %>% data.frame() %>%
+                                      mutate(days_ago=t)
+                              )
+        
+        
+}
+
+
+vax_beta_draws %>%
+        ggplot(aes(x=theta,col=factor(days_ago)))+
+                geom_density()
+
+
+
+#run it
+
+cat_counts<- vax21_run_25$sim1 %>% 
+        ungroup()%>%
+        count(seropos,V) %>%
+        mutate(category=glue::glue("S{seropos}Q{V}")) %>%
+        select(n,category) %>%
+        spread(category,n)
+
+stan_obj <- list(
+          S0Q0 = cat_counts$S0Q0+cat_counts$S0Q1,
+          S1Q0 = cat_counts$S1Q0+cat_counts$S1Q1,
+          S0Q1 = 0,
+          S1Q1 = 0,
+        
+         alpha_p1 = sens_beta$estimate[1],
+         alpha_p2 = sens_beta$estimate[2],
+         beta_p1 = spec_beta$estimate[1],
+         beta_p2 = spec_beta$estimate[2],
+         epsilon_p1 = vax_beta %>%
+                 filter(days_ago==21) %>%
+                 pull(shape1),
+         epsilon_p2 =vax_beta %>%
+                 filter(days_ago==21) %>%
+                 pull(shape2)
+)
+
+library(rstan)
+
+second_model <- stan_model("code/stan/vax-model-simplified.stan")
+fit <- fit_second_model <- sampling(second_model, data = stan_obj)
+
+shinystan::launch_shinystan(fit)
+

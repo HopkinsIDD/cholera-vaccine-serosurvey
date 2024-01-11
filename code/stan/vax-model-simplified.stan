@@ -4,9 +4,6 @@ data {
   int  S1Q0;
   int  S0Q1;
   int  S1Q1;
-
-  // real gamma_p1;
-  // real gamma_p2;
   
   real alpha_p1;
   real alpha_p2;
@@ -32,7 +29,7 @@ parameters {
 
 model {
         
-  // target += beta_lpdf(gamma|gamma_p1,gamma_p2) ; //coverage prior
+  target += beta_lpdf(gamma|1,1) ; //coverage prior
 // 
   target += beta_lpdf(alpha|alpha_p1,alpha_p2) ; //sensitivity prior
   target += beta_lpdf(beta|beta_p1,beta_p2); //specificity prior on unvaxxed
