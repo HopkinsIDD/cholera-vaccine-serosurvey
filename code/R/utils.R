@@ -5216,7 +5216,100 @@ generate_MDS <- function(data,regex_string="Ogawa|Inaba|TcpA|CtxB|IgG_O139"){
         
 }
 
+### simulation functions
+
+simulate_serosurvey_novax <- function(n_sim, n_survey=1000, sens_df,spec_df,incidence){
+        
+        out_list <- list()
+        
+        for(i in 1:n_sim){
+                
+                #lets do a serosurvey in a place with no vaccination but 5% incidence
+                true_data <- data.frame(
+                        sero_id=paste0("A",1:n_survey),
+                        R=rbinom(n_survey, 1,incidence),
+                        days_ago = ceiling(runif(n_survey,0,200))
+                ) %>%
+                        mutate(days_ago=ifelse(R==0,NA,days_ago))
+                
+                TP_df <- filter(true_data,R==1) %>%
+                        group_by(sero_id)%>%
+                        mutate(pos_ID=sample(unique(sens_df$pos_ID),1)) %>%
+                        left_join(sens_df, by =c("days_ago", "pos_ID")) %>%
+                        mutate(seropos=rbinom(1,1,ind_sens)) #%>%
+                # select(sero_id,R,days_ago,pos_ID,seropos)
+                
+                TN_df <- filter(true_data,R==0) %>%
+                        group_by(sero_id)%>%
+                        mutate(neg_ID=sample(unique(spec_df$neg_ID),1)) %>%
+                        left_join(spec_df,by ="neg_ID") %>%
+                        mutate(seropos=1-rbinom(1,1,ind_spec))#%>%
+                # select(sero_id,R,days_ago,neg_ID,seropos)
+                
+                
+                sero_data <- bind_rows(TP_df,TN_df) %>%
+                        arrange(sero_id) %>%
+                        mutate(
+                                incidence=incidence)
+                
+                
+                out_list[[paste0("sim",i)]] <-sero_data
+        }
+        
+        
+        return(out_list)
+}
 
 
+simulate_serosurvey_vax <- function(n_sim, n_survey=1000,
+                                    sens_df,spec_df,vax_df,
+                                    coverage, incidence
+){
+        
+        out_list <- list()
+        
+        for(i in 1:n_sim){
+                
+                #lets do a serosurvey in a place with no vaccination but 5% incidence
+                true_data <- data.frame(
+                        sero_id=paste0("A",1:n_survey),
+                        R=rbinom(n_survey, 1,incidence),
+                        V=rbinom(n_survey, 1,coverage),
+                        days_ago = ceiling(runif(n_survey,0,200))
+                ) %>%
+                        mutate(days_ago=ifelse(R==0,NA,days_ago))
+                
+                TP_df <- filter(true_data,R==1) %>%
+                        group_by(sero_id)%>%
+                        mutate(pos_ID=sample(unique(sens_df$pos_ID),1)) %>%
+                        left_join(sens_df, by =c("days_ago", "pos_ID")) %>%
+                        mutate(seropos=rbinom(1,1,ind_sens)) %>%
+                        select(sero_id,R,V,days_ago,pos_ID,seropos)
+                
+                TN_df_novax <- filter(true_data,R==0,V==0) %>%
+                        group_by(sero_id)%>%
+                        mutate(neg_ID=sample(unique(spec_df$neg_ID),1)) %>%
+                        left_join(spec_df,by ="neg_ID") %>%
+                        mutate(seropos=1-rbinom(1,1,ind_spec))%>%
+                        select(sero_id,R,V,days_ago,neg_ID,seropos)
+                
+                TN_df_vax <- filter(true_data,R==0,V==1) %>%
+                        group_by(sero_id)%>%
+                        mutate(vax_ID=sample(unique(vax_df$vax_ID),1)) %>%
+                        left_join(vax_df,by="vax_ID") %>%
+                        mutate(seropos=1-rbinom(1,1,ind_spec))%>%
+                        select(sero_id,R,V,days_ago,vax_ID,seropos)
+                
+                sero_data <- bind_rows(TP_df,TN_df_novax,TN_df_vax) %>%
+                        arrange(sero_id) %>%
+                        mutate(coverage=coverage,
+                               incidence=incidence)
+                
+                out_list[[paste0("sim",i)]] <-sero_data
+        }
+        
+        
+        return(out_list)
+}
 
 
