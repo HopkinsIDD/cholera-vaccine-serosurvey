@@ -5,13 +5,17 @@ library(tidybayes)
 source("code/R/utils.R")
 
 
-##### get new spec_df object
-
+#load loocv object
 loocv_spec_list <- read_rds(
-          paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_list.rds")
+        paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_list.rds")
 )
 
-new_spec_obj<- loocv_spec_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$`Outside Window`$fit%>% 
+# 1. Get original model characteristics-----------
+
+#### Specificity (non-vaccinees)
+
+#get individual specificities for simulation
+spec_obj<- loocv_spec_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$`Outside Window`$fit%>% 
         spread_draws(`(Intercept)`,
                      b[term,group]) %>%
         mutate(logit_theta_j=`(Intercept)` + b
@@ -20,11 +24,25 @@ new_spec_obj<- loocv_spec_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$`Ou
         group_by(group)%>%
         summarize(theta=mean(theta_j),n()) %>%
         rename(neg_ID=group
-               ) %>%
+        ) %>%
         mutate(ind_spec=1-theta)
 
-##### get new sens_df object
+#get specificity distribution for seroincidence estimation
+spec_dist <- loocv_spec_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$`Outside Window`$fit%>% 
+        spread_draws(`(Intercept)`,
+                     b[term,group]) %>%
+        mutate(logit_theta_j=`(Intercept)` + b
+        ) %>%
+        mutate(theta_j = 1/(1+exp(-logit_theta_j)))  %>%
+        group_by(.draw) %>%
+        summarize(spec=1-mean(theta_j))
 
+#fit beta distribution
+spec_beta <- MASS::fitdistr(spec_dist$spec,
+                            densfun = "beta", list(shape1=1,shape2=1))
+#### Sensitivity
+
+#load stan fit
 loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list_SMICPIC.rds")
 
 sens_fitdata <-loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$data
@@ -34,12 +52,16 @@ sens_spread <- loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Cas
                      day1,day2,day3
         )
 
-new_sens_obj <- data.frame()
+#for loop through potential days since infection
+sens_obj <- data.frame()
+sens_beta_draws <-data.frame()
 
 for(t in 1:200){
         
+        cat(t,"\n")
         time <- log(t) -mean(log(sens_fitdata$new_day))
         
+        #get individual sensitivities for simulation
         tmp_df <- sens_spread %>%
                 mutate(logit_theta_j=`(Intercept)` + b+
                                day1*time +
@@ -55,10 +77,39 @@ for(t in 1:200){
                        ind_sens=theta
                 )
         
-        new_sens_obj <- bind_rows(new_sens_obj,tmp_df)
+        sens_obj <- bind_rows(sens_obj,tmp_df)
+
+        #get sensitivity distribution for seroincidence estimation
+        tmp_dist <- sens_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(.draw) %>%
+                summarize(theta=mean(theta_j),n()) %>%
+                mutate(days_ago=t)
+        
+        sens_beta_draws <-bind_rows(
+                sens_beta_draws,
+                tmp_dist
+        )
 }
 
-#### new vax_obj
+
+#fit beta distribution
+sens_beta <- sens_beta_draws %>% group_by(.draw)%>%
+        summarize(sens=mean(theta)) %>%
+        pull(sens) %>%
+        MASS::fitdistr(
+                densfun = "beta", list(shape1=1,shape2=1))
+
+
+#### Specificity (vaccinees)
+
+#load stan fit
 tvfpr_fit <- read_rds("data/generated_data/analysis_objects/misclassification/tvfpr_fit.rds")
 
 vax_fitdata <-tvfpr_fit$`200`$`All Vaccinees`$data
@@ -68,15 +119,20 @@ vax_spread <- tvfpr_fit$`200`$`All Vaccinees`$fit%>%
                      day1,day2,day3
         )
 
-
+#for loop through potential campaign timings
 campaign_timepoints <- c(21,45,90,120,180)
 
-new_vax_tv_obj <- data.frame()
+vax_tv_obj <- data.frame()
+vax_beta_draws <- data.frame()
+vax_beta <- data.frame()
+
 
 for(t in campaign_timepoints){
         
+        cat(t,"\n")
         time <- log(t) -mean(log(vax_fitdata$new_day))
         
+        #get individual specificities for simulation
         tmp_df <- vax_spread %>%
                 mutate(logit_theta_j=`(Intercept)` + b+
                                day1*time +
@@ -91,73 +147,10 @@ for(t in campaign_timepoints){
                 rename(vax_ID=group) %>%
                 mutate(ind_spec=1-theta)
         
-        new_vax_tv_obj <- bind_rows(new_vax_tv_obj,tmp_df)
-}
+        vax_tv_obj <- bind_rows(vax_tv_obj,tmp_df)
 
-
-##### New stan fitting of simulations
-
-#specificity (non vax)
-
-spec_dist <- loocv_spec_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$`Outside Window`$fit%>% 
-        spread_draws(`(Intercept)`,
-                     b[term,group]) %>%
-        mutate(logit_theta_j=`(Intercept)` + b
-        ) %>%
-        mutate(theta_j = 1/(1+exp(-logit_theta_j)))  %>%
-        group_by(.draw) %>%
-        summarize(spec=1-mean(theta_j))
-
-spec_beta <- MASS::fitdistr(spec_dist$spec,
-                            densfun = "beta", list(shape1=1,shape2=1))
-
-# sensitivity
-sens_beta_draws <-data.frame()
-
-for(t in 1:200){
-        
-        cat(t,"\n")
-        
-        time <- log(t) -mean(log(sens_fitdata$new_day))
-        
-        tmp_dist <- sens_spread %>%
-                mutate(logit_theta_j=`(Intercept)` + b+
-                               day1*time +
-                               day2*time^2+
-                               day3*time^3
-                       
-                ) %>%
-                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-                group_by(.draw) %>%
-                summarize(theta=mean(theta_j),n()) %>%
-                mutate(days_ago=t)
-        
-        
-        
-        sens_beta_draws <-bind_rows(
-                sens_beta_draws,
-                tmp_dist
-        )
-}
-
-
-
-sens_beta <- sens_beta_draws %>% group_by(.draw)%>%
-        summarize(sens=mean(theta)) %>%
-        pull(sens) %>%
-        MASS::fitdistr(
-                densfun = "beta", list(shape1=1,shape2=1))
-
-### specificity for vaccinees
-vax_beta_draws <- data.frame()
-vax_beta <- data.frame()
-
-for(t in campaign_timepoints){
-        cat(t,"\n")
-        
-        time <- log(t) -mean(log(vax_fitdata$new_day))
-        
-        tmp_df <- vax_spread %>%
+        #get specificity distribution for seroincidence estimation
+        tmp_dist <- vax_spread %>%
                 mutate(logit_theta_j=`(Intercept)` + b+
                                day1*time +
                                day2*time^2+
@@ -169,9 +162,10 @@ for(t in campaign_timepoints){
                 summarize(theta=1-mean(theta_j),n()) %>% #average across individuals here
                 mutate(days_ago=t)
         
-        vax_beta_draws <- bind_rows(vax_beta_draws,tmp_df)
+        vax_beta_draws <- bind_rows(vax_beta_draws,tmp_dist)
         
-        tmp_beta <- tmp_df$theta %>%
+        #fit beta distribution
+        tmp_beta <- tmp_dist$theta %>%
                 MASS::fitdistr(
                         densfun = "beta", list(shape1=1,shape2=1))
         
@@ -180,7 +174,57 @@ for(t in campaign_timepoints){
                                       t() %>% data.frame() %>%
                                       mutate(days_ago=t)
         )
+
 }
+
+
+
+# 2. Get alternative model characteristics -----------
+
+
+#### Specificity (non-vaccinees)
+
+# loocv_spec_list$`Reduced IgG Panel`$all_fitdata$`200-day`$`Outside Window`$fit%>% 
+
+
+#### Sensitivity
+
+#load stan fit
+# loocv_sens_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$fit
+
+#### Specificity (vaccinees)
+
+#load stan fit
+# loocv_spec_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Vaccinee$fit
+
+
+
+
+
+# 3. Simulate truth and seropositivity -----------
+sims <- sim_truth(10,1000,0.5,0.05)
+
+sims_original <- sims %>% lapply(make_seropos,model_name = "Original",
+                sens_df= sens_obj,
+                spec_df= spec_obj,
+                vax_df = vax_tv_obj,
+                vax_day=21
+                )
+
+
+# sims_alternative <- sims %>% lapply(make_seropos,model_name = "Alternative Model",
+#                          sens_df= new_sens_obj,
+#                          spec_df= new_spec_obj,
+#                          vax_df = new_vax_obj)
+
+
+# 4. Run stan models to get seroincidence estimates -----------
+
+
+
+
+### OLD
+
 
 
 
