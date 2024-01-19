@@ -5356,7 +5356,7 @@ make_seropos <- function(data, model_name,
                 mutate(seropos=1-rbinom(1,1,ind_spec))%>%
                 select(sero_id,seropos)
         
-        vax_df_time <- filter(vax_df,days_ago==vax_day)
+        if(!is.na(vax_day)) vax_df <- filter(vax_df,days_ago==vax_day)
         
         TN_df_vax <- filter(data,R==0,V==1) %>%
                 group_by(sero_id)%>%
