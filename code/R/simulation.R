@@ -307,34 +307,13 @@ new_draws <- new_fit$fit%>%
 
 
 
-
-
-
-# 3. Simulate truth and seropositivity -----------
-# sims <- sim_truth(10,1000,0.5,0.05)
-# 
-# sims_original <- sims %>% lapply(make_seropos,model_name = "Original",
-#                 sens_df= original_sens_obj,
-#                 spec_df= original_spec_obj,
-#                 vax_df = original_vax_tv_obj,
-#                 vax_day=21
-#                 )
-# 
-# 
-# sims_alternative <- sims %>% lapply(make_seropos,model_name = "Alternative Model",
-#                          sens_df= alternative_sens_obj,
-#                          spec_df= alternative_spec_obj,
-#                          vax_df = alternative_vax_obj,
-#                          vax_day=NA
-#                          )
-
-
-# 4. Run stan models to get seroincidence estimates -----------
+# 3. Run simulations and stan models to get seroincidence estimates -----------
 
 simulation_df <-data.frame()
+sims_original <- list()
 lambda_df <- data.frame()
 
-simulations <- 10
+simulations <- 100
 n_survey <- 1000
 coverage_values <- c(0, 0.25, 0.5, 0.75)
 
@@ -348,7 +327,7 @@ for(cov in coverage_values){
         #simulate seropositivity
         for(t in campaign_timepoints){
                 
-                sims_original <- tmp_sim %>% lapply(make_seropos,model_name = "Original Model",
+                sims_original[[as.character(t)]] <- tmp_sim %>% lapply(make_seropos,model_name = "Original Model",
                                                     sens_df= original_sens_obj,
                                                     spec_df= original_spec_obj,
                                                     vax_df = original_vax_tv_obj,
@@ -358,7 +337,7 @@ for(cov in coverage_values){
                 
                 simulation_df <- bind_rows(
                         simulation_df,
-                        sims_original %>%
+                        sims_original[[as.character(t)]] %>%
                                 group_by(simulation, coverage, campaign_day,incidence) %>%
                                 summarize(truth=mean(R),seropos=mean(`Original Model`)) %>% 
                                 mutate(model="Original")
@@ -381,16 +360,15 @@ for(cov in coverage_values){
                         mutate(model="Alternative")
         )
         
-        
-        #use the original model at each time point
              for(i in names(tmp_sim)){
                      for(t in campaign_timepoints){
                              
                         ### Strategy 1: Ignore
                         this_count_vec <- c(0,0,0,0)
                         
-                        this_count <- sims_original %>%
+                        this_count <- sims_original[[as.character(t)]] %>%
                                 filter(simulation==i) %>%
+                                filter(campaign_day==t)%>%
                                 count(simulation,`Original Model`,V,coverage,incidence,campaign_day) %>%
                                 mutate(category=glue::glue("S{`Original Model`}Q{V}")) %>%
                                 select(-`Original Model`,-V) %>%
@@ -549,6 +527,23 @@ lambda_df  %>%
 
 
 
+# 3. Simulate truth and seropositivity -----------
+# sims <- sim_truth(10,1000,0.5,0.05)
+# 
+# sims_original <- sims %>% lapply(make_seropos,model_name = "Original",
+#                 sens_df= original_sens_obj,
+#                 spec_df= original_spec_obj,
+#                 vax_df = original_vax_tv_obj,
+#                 vax_day=21
+#                 )
+# 
+# 
+# sims_alternative <- sims %>% lapply(make_seropos,model_name = "Alternative Model",
+#                          sens_df= alternative_sens_obj,
+#                          spec_df= alternative_spec_obj,
+#                          vax_df = alternative_vax_obj,
+#                          vax_day=NA
+#                          )
 
 # %>%
 #         bind_rows(lambda_df %>% select(-.lower,-.upper))%>%
