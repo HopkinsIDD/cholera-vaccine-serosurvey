@@ -4091,6 +4091,61 @@ fit_spec <- function(data,
         
 }
 
+fit_spec_covariate <- function(data,
+                     end_window,
+                     seropos_type,
+                     covariate
+                     ){
+        
+        
+        #get data ready
+        spec_data <- data %>% filter(truth==0) 
+        
+        #choose seropositivity cutoff type        
+        spec_data$seropos_model <- spec_data[seropos_type] %>% unlist
+        
+        #check if correct window is specified
+        if(!end_window %in% c(45,120,200,300)){
+                stop("not a set time window")
+        }
+        
+        #run stan model
+        logitfit<- stan_glmer(seropos_model ~ (1|id)+covariate, 
+                              data = spec_data,
+                              family = binomial(link = "logit"), 
+        )
+        spread <- logitfit %>% 
+                spread_draws(`(Intercept)`,
+                             b[term,group])
+        
+        
+        new_df <- spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(.draw) %>%
+                summarize(theta=mean(theta_j),n()) 
+        
+        
+        summary_df <- new_df %>%
+                summarize(
+                        lb = 1-quantile(theta,0.975),
+                        median=1-median(theta),
+                        ub = 1-quantile(theta,0.025), 
+                ) %>% mutate(end_window=end_window)
+        
+        
+        list(
+                fit=logitfit,
+                data=spec_data,
+                out_df=new_df,
+                summary_df=summary_df
+        )
+        
+        
+}
+
+
 
 fit_tvfpr <- function(data,
                        end_window,
