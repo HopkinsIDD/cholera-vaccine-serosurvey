@@ -117,7 +117,10 @@ for(v in 1:length(var_list)){
 
 
 
-# write_rds(raw_df, "data/generated_data/loocv_3class_df.rds")
+write_rds(raw_df, "data/generated_data/loocv_3class_df.rds")
+
+
+raw_df <- read_rds("data/generated_data/loocv_3class_df.rds")
 
 
 raw_df %>%
@@ -162,12 +165,13 @@ raw_df %>%
         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
         mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
         mutate(prediction=factor(prediction)) %>%
-        group_by(variables,three_class,cohort,prediction) %>%
+        group_by(variables,three_class,cohort,status) %>%
+        mutate(Days=paste0(sort(unique(day)),collapse = ", ")) %>%
+        group_by(variables,three_class,cohort,status,Days,prediction,.drop=FALSE) %>%
         summarize(n=n(),
-                  day=paste0(unique(sort(day)),collapse = ", ")
                   ) %>%
-        group_by(variables,three_class,cohort,day, .drop=TRUE)%>%
-        mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%) ")) %>%
+        group_by(variables,three_class,cohort,status,Days)%>%
+        mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%)")) %>%
         spread(prediction,n) %>%
         rename(`Observed Class`=three_class,
                Model=variables) %>%
