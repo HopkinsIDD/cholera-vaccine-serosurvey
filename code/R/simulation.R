@@ -292,6 +292,11 @@ new_fit <- bind_rows(
                  end_window=200,
                  seropos_type= "spec95_seropos")
 
+#probably want something where we can estimate the specificity with a covariate given the two differences
+#can leave this be for now
+# see fit_spec_covariate for start on this
+
+
 new_draws <- new_fit$fit%>% 
         spread_draws(`(Intercept)`,
                      b[term,group]) %>%
@@ -307,6 +312,7 @@ new_draws <- new_fit$fit%>%
 
 
 
+
 # 3. Run simulations and stan models to get seroincidence estimates -----------
 
 simulation_df <-data.frame()
@@ -316,16 +322,20 @@ lambda_df <- data.frame()
 simulations <- 100
 n_survey <- 1000
 coverage_values <- c(0, 0.25, 0.5, 0.75)
+true_seroinc <- 0.1
 
 stan_model_compiled <- stan_model("code/stan/vax-model-simplified.stan")
 
 for(cov in coverage_values){
         
+        
         #simulate the true values
-        tmp_sim <- sim_truth(simulations,n_survey,coverage = cov, incidence = 0.05)
+        tmp_sim <- sim_truth(simulations,n_survey,coverage = cov, incidence = true_seroinc)
         
         #simulate seropositivity
         for(t in campaign_timepoints){
+                
+                cat("Coverage: ",cov, " Timing: ", t,"\n")
                 
                 sims_original[[as.character(t)]] <- tmp_sim %>% lapply(make_seropos,model_name = "Original Model",
                                                     sens_df= original_sens_obj,
@@ -363,12 +373,14 @@ for(cov in coverage_values){
              for(i in names(tmp_sim)){
                      for(t in campaign_timepoints){
                              
+                     cat("Simulation: ",i , "Timepoint: ", t, "\n")
+                             
                         ### Strategy 1: Ignore
                         this_count_vec <- c(0,0,0,0)
                         
                         this_count <- sims_original[[as.character(t)]] %>%
                                 filter(simulation==i) %>%
-                                filter(campaign_day==t)%>%
+                                # filter(campaign_day==t)%>%
                                 count(simulation,`Original Model`,V,coverage,incidence,campaign_day) %>%
                                 mutate(category=glue::glue("S{`Original Model`}Q{V}")) %>%
                                 select(-`Original Model`,-V) %>%
@@ -399,7 +411,8 @@ for(cov in coverage_values){
                         )
                         
                         biased_fit<- sampling(stan_model_compiled,
-                                              data = biased_data)
+                                              data = biased_data
+                                              )
                 
                         ### Strategy 2: Questionnaire adjustment
                         questionnaire_data <- list(
@@ -462,7 +475,8 @@ for(cov in coverage_values){
                         rapid_cov <- rbinom(1,500,cov)/500
                      
                         #calculate the beta distribution for specificity distribution
-                        alternative_spec_beta <- new_draws %>% mutate(combined=rapid_cov*Vaccinee+(1-rapid_cov)*`Outside Window`) %>%
+                        alternative_spec_beta <- new_draws %>%
+                                mutate(combined=rapid_cov*Vaccinee+(1-rapid_cov)*`Outside Window`) %>%
                                 pull(combined) %>%
                                 MASS::fitdistr(
                                         densfun = "beta", list(shape1=1,shape2=1))
@@ -497,10 +511,24 @@ for(cov in coverage_values){
                                     )
                                         )
                      
+                     write_rds(simulation_df, paste0("data/generated_data/analysis_objects/simulation/simulation_df_",
+                                                     true_seroinc*100,
+                                                     ".rds"))
+                     write_rds(lambda_df, paste0("data/generated_data/analysis_objects/simulation/lambda_df_",
+                               true_seroinc*100,
+                               ".rds"))
+                     write_rds(sims_original,paste0("data/generated_data/analysis_objects/simulation/sims_original_",
+                               true_seroinc*100,
+                               ".rds"))
+                     
              }
 }
                 
-                
+# write_rds(simulation_df, "data/generated_data/analysis_objects/simulation/simulation_df_5.rds")
+# write_rds(lambda_df, "data/generated_data/analysis_objects/simulation/lambda_df_5.rds")
+# write_rds(sims_original, "data/generated_data/analysis_objects/simulation/sims_original_5.rds")
+
+sims_original
 
 simulation_df  %>%
         ggplot(aes(x=factor(campaign_day),y=seropos))+
@@ -525,6 +553,97 @@ lambda_df  %>%
                 xlab("Method")
 
 
+
+sims_viz <- filter(simulation_df,campaign_day==21, coverage==0) %>%
+                distinct(simulation,truth) %>%
+                mutate(`Ignore 21`=truth,
+                       `Ignore 120`=truth,
+                       `Questionnaire 21`=truth,
+                       `Alternative NA`=truth,
+                       ) %>%
+                select(-truth) %>%
+                gather(new_strategy, truth,-simulation) %>%
+        mutate(new_strategy = factor(new_strategy,
+                                     levels=c("Ignore 21", "Ignore 120",
+                                              "Questionnaire 21", "Alternative NA"
+                                     ),
+                                     labels=c("Original Model\n(21 days)", "Original Model\n(120 days)",
+                                              "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
+        )
+        ) 
+                
+        
+
+
+lambda_df  %>%
+        filter(campaign_day == 21 |
+               (adjustment == "Ignore" & campaign_day == 120)|
+               adjustment == "Alternative"
+                       )%>%
+        mutate(new_strategy=paste(adjustment,campaign_day)) %>%
+        mutate(new_strategy = factor(new_strategy,
+                levels=c("Ignore 21", "Ignore 120",
+                         "Questionnaire 21", "Alternative NA"
+                         ),
+                labels=c("Original Model\n(21 days)", "Original Model\n(120 days)",
+                         "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
+                )
+                       ) %>%
+        mutate(new_coverage=factor(coverage,
+                                   labels=c("0% Coverage",
+                                            "25% Coverage",
+                                            "50% Coverage",
+                                            "75% Coverage"
+                                            )
+                                   )) %>%
+        group_by(new_strategy,coverage)%>%
+        mutate(avg_lambda=mean(lambda)) %>%
+        ggplot(aes(x=new_strategy))+
+        geom_violin(aes(y=lambda),fill=NA,col="blue")+
+        geom_violin(data= sims_viz,
+                    aes(y=truth), fill="grey",alpha=0.3,col=NA
+                    )+
+        geom_point(aes(x=new_strategy,y=avg_lambda),col="blue")+
+        facet_wrap(new_coverage~.)+
+        cowplot::theme_cowplot()+
+        theme(axis.text.x = element_text(angle=45,hjust = 1))+
+        ylab("200-day seroincidence")+
+        xlab("Strategy")
+
+
+lambda_df  %>%
+        filter(adjustment== "Ignore", campaign_day == 21) %>%
+        mutate(new_coverage=factor(coverage,
+                                   labels=c("0% Coverage",
+                                            "25% Coverage",
+                                            "50% Coverage",
+                                            "75% Coverage"
+                                   )
+        )) %>%
+        group_by(new_coverage) %>%
+        summarize(lambda=glue::glue("{round(mean(lambda),2)} {round(min(lambda),2)}-{round(max(lambda),2)}")
+        )
+
+
+lambda_df  %>%
+        filter(campaign_day == 21 |
+                       (adjustment == "Ignore" & campaign_day == 120)|
+                       adjustment == "Alternative"
+        )%>%
+        mutate(new_strategy=paste(adjustment,campaign_day)) %>%
+        mutate(new_strategy = factor(new_strategy,
+                                     levels=c("Ignore 21", "Ignore 120",
+                                              "Questionnaire 21", "Alternative NA"
+                                     ),
+                                     labels=c("Original Model (21 days)", "Original Model (120 days)",
+                                              "Original Model + Questionnaire (21 days)", 
+                                              "Alternative Model 1 (21 days)")
+        )
+        ) %>%
+        filter(coverage==0.5) %>%
+        group_by(new_strategy) %>%
+        summarize(lambda=glue::glue("{round(mean(lambda),2)} {round(min(lambda),2)}-{round(max(lambda),2)}")
+                  )
 
 
 # 3. Simulate truth and seropositivity -----------
