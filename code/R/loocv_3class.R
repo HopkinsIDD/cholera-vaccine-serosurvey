@@ -18,8 +18,8 @@ var_list <- list(
 all_fitdata <- final_wide %>%
         filter(cohort %in% c("BGD Vaccinee", "SMIC/PIC", "HTI Vaccinee")) %>%
         mutate(three_class=case_when(
-                status== "Case" & day_actual <= 60 & day_actual >= 5 ~ "RecentlyInfected",
-                status== "Vaccinee" & day_actual <= 60 & day_actual >= 5 ~ "RecentlyVaccinated",
+                status== "Case" & day_actual <= 200 & day_actual >= 5 ~ "RecentlyInfected",
+                status== "Vaccinee" & day_actual <= 200 & day_actual >= 5 ~ "RecentlyVaccinated",
                 TRUE ~ "Neither"
         ))
 # missing <-all_fitdata[,var_list$`All Variables`] %>% is.na() %>% rowSums()
@@ -29,7 +29,7 @@ all_fitdata <- final_wide %>%
 
 #important variables
 tree_param <- 1000
-t <-60
+t <-200
 ids <- unique(all_fitdata$id) 
 
 
@@ -131,12 +131,15 @@ raw_df %>%
                 group_by(variables,three_class) %>%
                 mutate(proportion=n/sum(n)) %>%
         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
         mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
         ggplot(aes(x=three_class,y=prediction))+
                 geom_tile(aes(fill=100*proportion))+
                 facet_wrap(.~variables)+
                 geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
-        scale_fill_distiller("Percent\nClassified",palette = "Oranges",direction = 1)+
+        scale_fill_distiller("Percent\nClassified",palette = "Oranges",
+                             direction = 1
+                             )+
         xlab("Observed Class")+
         ylab("Predicted Class")+
         theme_cowplot()

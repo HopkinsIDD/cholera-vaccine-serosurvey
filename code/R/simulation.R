@@ -16,6 +16,19 @@ loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tv
 
 loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds")
 
+# 0. Stan model list
+
+# Original model:
+
+# 1. Time-varying sensitivity
+# 2. Specificity among non-vaccine
+# 3. Time-varying vaccine misclasification
+
+# Alternative model:
+# 1. Time-varying sensitivity
+# 2. Specificity among vax & non-vax (covariate)
+
+
 # 1. Get original model characteristics-----------
 
 #### Sensitivity
@@ -288,7 +301,7 @@ new_fit <- bind_rows(
         filter(loocv_df,status=="Vaccinee")        
 ) %>%
         filter(variables=="Reduced IgG Panel",end_window==200,base_data_name=="all_fitdata") %>%
-        fit_spec(
+        fit_spec_byvax(
                  end_window=200,
                  seropos_type= "spec95_seropos")
 
