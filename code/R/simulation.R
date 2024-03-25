@@ -264,35 +264,6 @@ alternative_sens_beta <- alternative_sens_beta_draws %>% group_by(.draw)%>%
 
 
 
-#### Specificity (non-vaccinees)
-
-#get individual specificities for simulation
-alternative_spec_obj<- loocv_spec_list$`Reduced IgG Panel`$all_fitdata$`200-day`$`Outside Window`$fit%>% 
-        spread_draws(`(Intercept)`,
-                     b[term,group]) %>%
-        mutate(logit_theta_j=`(Intercept)` + b
-        ) %>%
-        mutate(theta_j = 1/(1+exp(-logit_theta_j))) %>%
-        group_by(group)%>%
-        summarize(theta=mean(theta_j),n()) %>%
-        rename(neg_ID=group
-        ) %>%
-        mutate(ind_spec=1-theta)
-
-#### Specificity (vaccinees)
-
-#load stan fit
-alternative_vax_obj <- loocv_spec_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Vaccinee$fit%>% 
-        spread_draws(`(Intercept)`,
-                     b[term,group]) %>%
-        mutate(logit_theta_j=`(Intercept)` + b
-        ) %>%
-        mutate(theta_j = 1/(1+exp(-logit_theta_j))) %>%
-        group_by(group)%>%
-        summarize(theta=mean(theta_j),n()) %>%
-        rename(vax_ID=group
-        ) %>%
-        mutate(ind_spec=1-theta)
 
 
 # fit new stan model        
@@ -302,8 +273,46 @@ new_fit <- bind_rows(
 ) %>%
         filter(variables=="Reduced IgG Panel",end_window==200,base_data_name=="all_fitdata") %>%
         fit_spec_byvax(
-                 end_window=200,
-                 seropos_type= "spec95_seropos")
+                end_window=200,
+                seropos_type= "spec95_seropos")
+
+#### Specificity (non-vaccinees)
+
+# #get individual specificities for simulation
+alternative_spec_obj<- new_fit$fit%>% 
+        spread_draws(`(Intercept)`,
+                     b[term,group]
+        ) %>%
+        mutate(id=str_remove(group,"id\\:")) %>%
+        left_join(distinct(new_fit$data,id,status)) %>%
+        filter(status!="Vaccinee")%>%
+        mutate(logit_theta_j=`(Intercept)` + b ) %>%
+        mutate(theta_j = 1/(1+exp(-logit_theta_j))) %>%
+        group_by(group)%>%
+        summarize(theta=mean(theta_j),n()) %>%
+        rename(neg_ID=group
+        ) %>%
+        mutate(ind_spec=1-theta)
+        
+
+# #### Specificity (vaccinees)
+# 
+# #load stan fit
+alternative_vax_obj <- new_fit$fit%>%
+        spread_draws(`(Intercept)`,
+                     b[term,group],
+                     vax
+        ) %>%
+                mutate(id=str_remove(group,"id\\:")) %>%
+                left_join(distinct(new_fit$data,id,status)) %>%
+                filter(status=="Vaccinee")%>%
+                mutate(logit_theta_j=`(Intercept)` + b + vax) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j))) %>%
+                group_by(group)%>%
+                summarize(theta=mean(theta_j),n()) %>%
+                rename(vax_ID=group
+                ) %>%
+                mutate(ind_spec=1-theta)
 
 #probably want something where we can estimate the specificity with a covariate given the two differences
 #can leave this be for now
@@ -312,13 +321,14 @@ new_fit <- bind_rows(
 
 new_draws <- new_fit$fit%>% 
         spread_draws(`(Intercept)`,
-                     b[term,group]) %>%
-        mutate(logit_theta_j=`(Intercept)` + b
-        ) %>%
-        mutate(theta_j = 1/(1+exp(-logit_theta_j)))  %>% 
-        mutate(id=str_remove(group,"id\\:")) %>% 
-        left_join(distinct(new_fit$data,id,status)) %>%  
+                     b[term,group],
+                     vax
+                     ) %>%
+        mutate(id=str_remove(group,"id\\:")) %>%
+        left_join(distinct(new_fit$data,id,status)) %>%
         mutate(new_status=ifelse(status=="Vaccinee","Vaccinee","Outside Window"))%>%
+        mutate(logit_theta_j=`(Intercept)` + b + vax*(new_status=="Vaccinee")) %>%
+        mutate(theta_j = 1/(1+exp(-logit_theta_j)))  %>%
         group_by(.draw,new_status) %>%
         summarize(spec=1-mean(theta_j)) %>%
         spread(new_status,spec)
@@ -336,6 +346,7 @@ simulations <- 100
 n_survey <- 1000
 coverage_values <- c(0, 0.25, 0.5, 0.75)
 true_seroinc <- 0.1
+campaign_timepoints <- c(21,120)
 
 stan_model_compiled <- stan_model("code/stan/vax-model-simplified.stan")
 
@@ -531,7 +542,7 @@ for(cov in coverage_values){
                                true_seroinc*100,
                                ".rds"))
                      write_rds(sims_original,paste0("data/generated_data/analysis_objects/simulation/sims_original_",
-                               true_seroinc*100,
+                               true_seroinc*100, 
                                ".rds"))
                      
              }
@@ -568,6 +579,7 @@ lambda_df  %>%
 
 
 sims_viz <- filter(simulation_df,campaign_day==21, coverage==0) %>%
+        filter(incidence==true_seroinc)%>%
                 distinct(simulation,truth) %>%
                 mutate(`Ignore 21`=truth,
                        `Ignore 120`=truth,
@@ -583,11 +595,20 @@ sims_viz <- filter(simulation_df,campaign_day==21, coverage==0) %>%
                                      labels=c("Original Model\n(21 days)", "Original Model\n(120 days)",
                                               "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
         )
-        ) 
+        ) %>%
+        expand_grid(coverage=c("0% Coverage",
+                        "25% Coverage",
+                        "50% Coverage",
+                        "75% Coverage"
+        ))%>%
+        mutate(new_coverage=factor(coverage,
+                                   labels=c("0% Coverage",
+                                            "25% Coverage",
+                                            "50% Coverage",
+                                            "75% Coverage"
+                                   )
+        )) 
                 
-        
-
-
 lambda_df  %>%
         filter(campaign_day == 21 |
                (adjustment == "Ignore" & campaign_day == 120)|
@@ -611,15 +632,21 @@ lambda_df  %>%
                                    )) %>%
         group_by(new_strategy,coverage)%>%
         mutate(avg_lambda=mean(lambda)) %>%
+        ungroup()%>%
+        select(simulation,new_strategy,new_coverage,lambda,avg_lambda) %>%
+        left_join(sims_viz,by = c("simulation", "new_strategy", "new_coverage")) %>%
+        gather(type,value,-c(simulation,new_strategy, new_coverage, avg_lambda,coverage))%>%
         ggplot(aes(x=new_strategy))+
-        geom_violin(aes(y=lambda),fill=NA,col="blue")+
-        geom_violin(data= sims_viz,
-                    aes(y=truth), fill="grey",alpha=0.3,col=NA
-                    )+
-        geom_point(aes(x=new_strategy,y=avg_lambda),col="blue")+
+        geom_violin(aes(y=value,col=type,alpha=type),position="identity",fill="grey",
+                    trim=FALSE,scale="area")+
+        scale_color_manual(values=c("blue",NA),na.value = NA)+
+        scale_alpha_manual(values=c(0,0.3))+
+        geom_point(aes(y=avg_lambda),col="blue")+
         facet_wrap(new_coverage~.)+
         cowplot::theme_cowplot()+
-        theme(axis.text.x = element_text(angle=45,hjust = 1))+
+        theme(axis.text.x = element_text(angle=45,hjust = 1),
+              legend.position = "none"
+              )+
         ylab("200-day seroincidence")+
         xlab("Strategy")
 
