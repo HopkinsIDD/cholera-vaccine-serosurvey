@@ -5258,13 +5258,13 @@ mysqrt_trans <- function() {
 generate_MDS <- function(data,regex_string="Ogawa|Inaba|TcpA|CtxB|IgG_O139"){
         
         mds_data <- data %>% 
-                select(status,cohort,matches(regex_string))
+                select(sample,status,cohort,matches(regex_string))
         # select(vaxinf_class,matches("Ogawa|Inaba|TcpA|IgG_O139"))
         
-        mds_dist = dist(x = scale(mds_data[,-c(1,2)]))
+        mds_dist = dist(x = scale(mds_data[,-(1:4)]))
         mds_analysis <- smacof::mds(delta = mds_dist , ndim = 2 , type = "ratio")
         
-        out <- bind_cols(select(mds_data,status,cohort),
+        out <- bind_cols(select(mds_data,sample,status,cohort),
                          as.data.frame(mds_analysis$conf))
         
         return(out)
