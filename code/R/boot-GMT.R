@@ -1,11 +1,11 @@
 #boot strap GM MFI ratio
 samples_vax_child <- final_df %>%
-        filter(status=="Vaccinee",age<10,day==0) %>%
+        filter(status=="Vaccinee",age<10,day==0,cohort=="BGD Vaccinee") %>%
         distinct(sample,status) %>%
         mutate(`Age Group`="Children")
 
 samples_vax_adult <- final_df%>%
-        filter(status=="Vaccinee",age>=10,day==0) %>%
+        filter(status=="Vaccinee",age>=10,day==0,cohort=="BGD Vaccinee") %>%
         distinct(sample,status) %>%
         mutate(`Age Group`="Adults")
 
@@ -22,7 +22,7 @@ samples_case_adult <- final_df %>%
 
 baseline_sero_data <- final_df %>% 
         filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
-        filter(antigen %in% c("CtxB","OgawaOSPBSA","InabaOSPBSA","O139BSA")) %>%
+        filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")) %>%
         mutate(`Age Group`=ifelse(age>=10,"Adults","Children")) 
 
 
@@ -52,7 +52,7 @@ for(i in 1:1000){
                 summarize(avg_value=mean(RAU_value)) %>%
                 group_by(isotype,antigen,`Age Group`) %>%
                 summarize(difference=avg_value[status=="Vaccinee"]-avg_value[status=="Case"]) %>%
-                mutate(mfi_ratio=10^difference)
+                mutate(RAU_ratio=10^difference)
         
         #store value
         bootDF <- bind_rows(bootDF,

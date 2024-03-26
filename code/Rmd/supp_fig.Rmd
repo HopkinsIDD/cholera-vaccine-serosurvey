@@ -15,30 +15,30 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message =FALSE, eval = FALS
 ```
 
 ```{r libraries, eval = TRUE}
-library(tidyverse)
-library(readxl)
-library(rdrop2)
-
-library(randomForest)
-library(party)
-library(permimp)
-library(cvAUC)
-
-library(cowplot)
-library(captioner)
-library(corrplot)
-library(scales)
-
-library(rstan)
-options(mc.cores = parallel::detectCores())
-rstan_options(auto_write = TRUE)
-library(tidybayes)
-# library(readstata13)
-
-source("source/final_code/shared/utils.R")
-source("source/final_code/shared/utils_vax.R")
-source("source/final_code/shared/utils_recon.R")
-
+# library(tidyverse)
+# library(readxl)
+# library(rdrop2)
+# 
+# library(randomForest)
+# library(party)
+# library(permimp)
+# library(cvAUC)
+# 
+# library(cowplot)
+# library(captioner)
+# library(corrplot)
+# library(scales)
+# 
+# library(rstan)
+# options(mc.cores = parallel::detectCores())
+# rstan_options(auto_write = TRUE)
+# library(tidybayes)
+# # library(readstata13)
+# 
+# source("source/final_code/shared/utils.R")
+# source("source/final_code/shared/utils_vax.R")
+# source("source/final_code/shared/utils_recon.R")
+# 
 
 
 ```
@@ -47,11 +47,23 @@ source("source/final_code/shared/utils_recon.R")
 
 ```{r data, eval=TRUE}
 
-source("source/final_code/vax_strategy/R/load-data.R")
+# source("source/final_code/vax_strategy/R/load-data.R")
 
 
 ```
 
+
+
+```{r}
+
+source("code/R/packages.R")
+source("code/R/utils.R")
+# source("code/R/load-data.R")
+
+final_df <- read_rds("data/generated_data/analysis_data/final_df.rds")
+final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
+
+```
 
 \pagebreak
 
@@ -184,6 +196,7 @@ tab_nums(name = "coverage-table", caption = "Average and range of coverage estim
 
 \pagebreak
 
+
 ### `r fig_nums("vax-timing")`
 
 Each point represents a blood sample collection occurred for a vaccinated volunteer (A). The daily number of samples is shown on the y-axis (B). Red-dashed line indicates timing of second dose at 14 days.
@@ -191,38 +204,69 @@ Each point represents a blood sample collection occurred for a vaccinated volunt
 
 ```{r vax-timing, eval=TRUE, fig.height = 12}
 
-timing_df <- distinct(analysisData$netMFI_data$long_data,
-                      id, day, day_actual,age_group,status) %>%
-                filter(status=="Vaccinee") %>%
-                mutate(age_group2=ifelse(age_group=="18+ years",
-                                         "18+ years","<18 years"
-                                         ))
-
-
-p_dot_plot <- timing_df %>%
-                ggplot(aes(x=day_actual,y=id))+
+#keep
+final_wide %>%
+        filter(status=="Vaccinee") %>%
+        mutate(pretty_cohort=str_replace(cohort,"BGD","Bangladeshi"))%>%
+        mutate(pretty_cohort=str_replace(pretty_cohort,"HTI","Haitian"))%>%
+        mutate(pretty_cohort=paste0(pretty_cohort,"s")) %>%
+                ggplot(aes(x=day,y=id))+
                 geom_point()+
                 geom_line()+
-                facet_grid(age_group2~.,space = "free",scales = "free")+
-                scale_x_continuous("Days post first dose vaccination", breaks = c(90,180,365*c(0,1,2,3)))+
-                geom_vline(xintercept = c(14),col="red",lty=2)+
+                facet_grid(pretty_cohort~.,space = "free",scales = "free")+
+                scale_x_continuous("Days post first dose vaccination", breaks = c(14,45,
+                                                                                  90,180,360))+
+                geom_vline(xintercept = 14,col="red",lty=2)+
                 theme_cowplot()+
+                theme(axis.text.y = element_blank())+
                 ylab("Participant ID")
 
-p_sample_curve <- timing_df %>%
-                group_by(status, day_actual, day) %>% count() %>%
-                ggplot(aes(x=day_actual,y=n))+
-                geom_col()+
-                scale_y_continuous("Samples", breaks=seq(0,50,10))+
-                scale_x_continuous("Days post first dose vaccination", breaks = c(30,90,180,365))+
-                geom_vline(xintercept = c(14),col="red",lty=2)+
+#keep
+final_wide %>%
+        filter(status=="Case") %>%
+        group_by(id) %>%
+        mutate(order=max(day)) %>%
+                ggplot(aes(x=day,y=reorder(id,-order)))+
+                geom_point()+
+                geom_line()+
+                scale_x_continuous("Days post symptom onset", breaks = c(90,180,360,720,1080))+
                 theme_cowplot()+
-                theme(legend.position = "none")
+                theme(axis.text.y = element_blank())+
+                ylab("Participant ID")
 
 
-plot_grid(p_dot_plot,p_sample_curve,ncol = 1,align="v",rel_heights = c(3,1),axis="lr",
-          labels=c("A","B")
-          )
+# timing_df <- distinct(analysisData$netMFI_data$long_data,
+#                       id, day, day_actual,age_group,status) %>%
+#                 filter(status=="Vaccinee") %>%
+#                 mutate(age_group2=ifelse(age_group=="18+ years",
+#                                          "18+ years","<18 years"
+#                                          ))
+# 
+# 
+# p_dot_plot <- timing_df %>%
+#                 ggplot(aes(x=day_actual,y=id))+
+#                 geom_point()+
+#                 geom_line()+
+#                 facet_grid(age_group2~.,space = "free",scales = "free")+
+#                 scale_x_continuous("Days post first dose vaccination", breaks = c(90,180,365*c(0,1,2,3)))+
+#                 geom_vline(xintercept = c(14),col="red",lty=2)+
+#                 theme_cowplot()+
+#                 ylab("Participant ID")
+# 
+# p_sample_curve <- timing_df %>%
+#                 group_by(status, day_actual, day) %>% count() %>%
+#                 ggplot(aes(x=day_actual,y=n))+
+#                 geom_col()+
+#                 scale_y_continuous("Samples", breaks=seq(0,50,10))+
+#                 scale_x_continuous("Days post first dose vaccination", breaks = c(30,90,180,365))+
+#                 geom_vline(xintercept = c(14),col="red",lty=2)+
+#                 theme_cowplot()+
+#                 theme(legend.position = "none")
+# 
+# 
+# plot_grid(p_dot_plot,p_sample_curve,ncol = 1,align="v",rel_heights = c(3,1),axis="lr",
+#           labels=c("A","B")
+#           )
 
 
 ```
@@ -236,27 +280,23 @@ Baseline antibody measurements from cases (2-4 days after infection) and vaccine
 
 ```{r}
 
+#keep
 final_df %>%
         filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
-        # filter(test_type=="Luminex") %>%
         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")) %>%
-        # left_join(antigen_df)%>%
         mutate(`Age Group`=ifelse(age>=10,"Adults","Children")) %>%
         mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))%>%
-        ggplot(aes(y=RAU_value,fill=cohort,col=cohort,x=`Age Group`))+
-        # geom_boxplot(fill=NA)+
-        geom_dotplot(binaxis = "y", stackdir = "center",
-                     position="dodge",
-                     binwidth = 0.1
-                     )+
-        # geom_text(data=pvalue_df,label="*",y=4,aes(x=`Age Group`),
-        #           inherit.aes = FALSE,  size = 8
-        #           )+
-        # ylab("Baseline log10(Net MFI)") +
-        facet_grid(isotype~antigen_pretty)+
-        theme_bw()+
-        theme(legend.position="bottom")
+        mutate(pretty_cohort=ifelse(cohort=="SMIC/PIC",
+                                    "BGD Case",cohort
+                                    ))%>%
+        ggplot(aes(y=RAU_value,col=pretty_cohort,x=`Age Group`))+
+                geom_boxplot()+
+                ylab("Baseline log10(1/RAU)") +
+                scale_color_brewer("Cohort",palette = "Set2")+
+                facet_grid(isotype~antigen_pretty)+
+                theme_bw()+
+                theme(legend.position="bottom")
 ```
 
 
@@ -277,63 +317,63 @@ final_df %>%
 #         left_join(antigen_df)%>%
 #         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))
 
-final_df %>%
-        filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
-        # filter(test_type=="Luminex") %>%
-        filter(!antigen %in% c("CtxB","OgawaOSPBSA","InabaOSPBSA","O139BSA")) %>%
-        # left_join(antigen_df)%>%
-        mutate(`Age Group`=ifelse(age>=10,"Adults","Children")) %>%
-        mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
-        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))%>%
-        filter(`Age Group`=="Children")%>%
-        ggplot(aes(y=RAU_value,fill=cohort,col=cohort,x=cohort))+
-        # geom_boxplot(fill=NA)+
-        geom_dotplot(binaxis = "y", stackdir = "center",
-                     position="dodge",
-                     binwidth = 0.1
-                     )+
-        # geom_text(data=pvalue_df,label="*",y=4,aes(x=`Age Group`),
-        #           inherit.aes = FALSE,  size = 8
-        #           )+
-        # ylab("Baseline log10(Net MFI)") +
-        facet_grid(isotype~antigen_pretty)+
-        theme_bw()+
-        theme(legend.position="bottom")
+# final_df %>%
+#         filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
+#         # filter(test_type=="Luminex") %>%
+#         filter(!antigen %in% c("CtxB","OgawaOSPBSA","InabaOSPBSA","O139BSA")) %>%
+#         # left_join(antigen_df)%>%
+#         mutate(`Age Group`=ifelse(age>=10,"Adults","Children")) %>%
+#         mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+#         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))%>%
+#         filter(`Age Group`=="Children")%>%
+#         ggplot(aes(y=RAU_value,fill=cohort,col=cohort,x=cohort))+
+#         # geom_boxplot(fill=NA)+
+#         geom_dotplot(binaxis = "y", stackdir = "center",
+#                      position="dodge",
+#                      binwidth = 0.1
+#                      )+
+#         # geom_text(data=pvalue_df,label="*",y=4,aes(x=`Age Group`),
+#         #           inherit.aes = FALSE,  size = 8
+#         #           )+
+#         # ylab("Baseline log10(Net MFI)") +
+#         facet_grid(isotype~antigen_pretty)+
+#         theme_bw()+
+#         theme(legend.position="bottom")
                 
 
-bootDF <- read_rds("source/final_code/vax_strategy/generated_rds/bootDF.rds")
-
-
-
-bootDF %>% 
-        group_by(isotype,antigen,`Age Group`) %>%
-        summarize(mean=mean(mfi_ratio),
-                  lb=quantile(mfi_ratio,0.025),
-                  ub=quantile(mfi_ratio,0.975)) %>%
-        mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
-        ggplot(aes(x=`Age Group`, col=isotype,y=mean))+
-                geom_point(position = position_dodge(0.5))+
-                geom_linerange(aes(ymin=lb,ymax=ub),
-                               position = position_dodge(0.5))+
-        facet_wrap(.~antigen,nrow=1)+
-        geom_hline(yintercept=1,lty=2)+
-        theme_bw()+
-        scale_y_continuous("Geometric Mean\nMFI Ratio", trans="log2")+
-        xlab("Age Group")+
-        theme(
-              legend.position = "bottom"
-              )+
-        scale_color_brewer("Isotype",palette = "Dark2")
-
-
-plot_grid(raw_baseline_plot,
-          GMT_ratio_plot,
-          rel_heights = c(2,1),
-          ncol=1,
-          align = "v",
-          axis="lr",
-          labels=c("A","B")
-          )
+# bootDF <- read_rds("source/final_code/vax_strategy/generated_rds/bootDF.rds")
+# 
+# 
+# 
+# bootDF %>% 
+#         group_by(isotype,antigen,`Age Group`) %>%
+#         summarize(mean=mean(mfi_ratio),
+#                   lb=quantile(mfi_ratio,0.025),
+#                   ub=quantile(mfi_ratio,0.975)) %>%
+#         mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+#         ggplot(aes(x=`Age Group`, col=isotype,y=mean))+
+#                 geom_point(position = position_dodge(0.5))+
+#                 geom_linerange(aes(ymin=lb,ymax=ub),
+#                                position = position_dodge(0.5))+
+#         facet_wrap(.~antigen,nrow=1)+
+#         geom_hline(yintercept=1,lty=2)+
+#         theme_bw()+
+#         scale_y_continuous("Geometric Mean\nMFI Ratio", trans="log2")+
+#         xlab("Age Group")+
+#         theme(
+#               legend.position = "bottom"
+#               )+
+#         scale_color_brewer("Isotype",palette = "Dark2")
+# 
+# 
+# plot_grid(raw_baseline_plot,
+#           GMT_ratio_plot,
+#           rel_heights = c(2,1),
+#           ncol=1,
+#           align = "v",
+#           axis="lr",
+#           labels=c("A","B")
+#           )
 
 
 
@@ -348,35 +388,35 @@ Y-axis indicates the log (base 10) of the Net MFI. X-axis is square-root transfo
 
 ```{r spaghetti-netmfi-supp, eval=TRUE}
 
-included_antigens <- c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")
-
-
-vax_long_NetMFI %>% filter(status =="Vaccinee") %>% 
-                filter(test_type=="Luminex") %>%
-                filter(!antigen_pretty  %in% included_antigens)%>%
-                mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
-                mutate(`Age Group`=ifelse(age<18,"<18 years","18+ years")) %>%
-                ggplot(aes(x=day_actual,y=value,col=`Age Group`))+
-                        geom_vline(xintercept=14,lty=3)+
-                        geom_line(aes(group=id),alpha=0.4)+
-                        facet_grid(isotype~antigen_pretty)+
-                        geom_rug(data=casecon_analysisMFI %>% filter(status =="Case") %>%
-                                filter(day_actual>5 & day_actual<=120) %>%
-                                filter(test_type=="Luminex") %>%
-                                filter(!antigen_pretty  %in% included_antigens),
-                                aes(y=value),sides="l",alpha=0.2,col="red")+
-                        geom_rug(data=casecon_analysisMFI %>%
-                                filter((!(day_actual>5 & day_actual<=120))|status=="Contact") %>%
-                                filter(test_type=="Luminex") %>%
-                                filter(!antigen_pretty  %in% included_antigens),
-                                aes(y=value),sides="r",alpha=0.2,col="black")+
-                        ylab("log10(Net MFI)")+
-        scale_x_continuous("Days Post First Dose", trans="mysqrt",
-                                           breaks=c(0,14,120,365),
-                                           limits = c(0,400))+
-                        scale_color_manual("Age Group",values=c("#003262","#FDB515"))+
-                        theme_cowplot()+
-                        theme(legend.position = "bottom")
+# included_antigens <- c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")
+# 
+# 
+# vax_long_NetMFI %>% filter(status =="Vaccinee") %>% 
+#                 filter(test_type=="Luminex") %>%
+#                 filter(!antigen_pretty  %in% included_antigens)%>%
+#                 mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
+#                 mutate(`Age Group`=ifelse(age<18,"<18 years","18+ years")) %>%
+#                 ggplot(aes(x=day_actual,y=value,col=`Age Group`))+
+#                         geom_vline(xintercept=14,lty=3)+
+#                         geom_line(aes(group=id),alpha=0.4)+
+#                         facet_grid(isotype~antigen_pretty)+
+#                         geom_rug(data=casecon_analysisMFI %>% filter(status =="Case") %>%
+#                                 filter(day_actual>5 & day_actual<=120) %>%
+#                                 filter(test_type=="Luminex") %>%
+#                                 filter(!antigen_pretty  %in% included_antigens),
+#                                 aes(y=value),sides="l",alpha=0.2,col="red")+
+#                         geom_rug(data=casecon_analysisMFI %>%
+#                                 filter((!(day_actual>5 & day_actual<=120))|status=="Contact") %>%
+#                                 filter(test_type=="Luminex") %>%
+#                                 filter(!antigen_pretty  %in% included_antigens),
+#                                 aes(y=value),sides="r",alpha=0.2,col="black")+
+#                         ylab("log10(Net MFI)")+
+#         scale_x_continuous("Days Post First Dose", trans="mysqrt",
+#                                            breaks=c(0,14,120,365),
+#                                            limits = c(0,400))+
+#                         scale_color_manual("Age Group",values=c("#003262","#FDB515"))+
+#                         theme_cowplot()+
+#                         theme(legend.position = "bottom")
                         
 
 ```
@@ -389,60 +429,60 @@ Color indicates the proportion of cases(A) and vaccinees (B) whose peak value fa
 
 ```{r prop-peak, eval=TRUE}
 
-prop_df <- analysisData$netMFI_data$long_data %>%
-                left_join(antigen_df) %>%
-                filter(test_type=="Luminex") %>%
-                filter(status %in% c("Case","Vaccinee")) %>%
-                filter(antigen_pretty  %in% c("CT-B","Ogawa OSP","Inaba OSP"))%>%
-                mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
-                mutate(`Age Group`=ifelse(age<18,"<18 years","18+ years")) %>%
-                group_by(isotype,antigen_pretty,`Age Group`,status,id) %>%
-                summarize(peak_day=min(day[value==max(value)])) %>% 
-                mutate(peak_day_group=ifelse(peak_day>=180,
-                                             "180+",as.character(peak_day))) %>%
-                group_by(isotype,antigen_pretty,`Age Group`,status,peak_day_group) %>%
-                count() %>%
-                group_by(isotype,antigen_pretty,`Age Group`,status)%>%
-                mutate(proportion=n/sum(n)) %>%
-                ungroup()
-
-
-case_plot<- prop_df %>%filter(status=="Case") %>%
-        distinct(isotype,antigen_pretty,`Age Group`,status) %>%
-        expand_grid(prop_df %>%
-                            filter(status=="Case") %>%
-                            distinct(peak_day_group)) %>%
-        left_join(prop_df %>% filter(status=="Case")) %>%
-        mutate(proportion=ifelse(is.na(proportion),0,proportion)) %>% 
-        mutate(`Peak Day`=factor(peak_day_group,
-                                     levels=c("2","7","30","90","180+"))) %>%
-        ggplot(aes(y=`Age Group`,x=`Peak Day`))+
-                geom_tile(aes(fill=proportion))+
-                facet_grid(isotype~antigen_pretty)+
-                scale_fill_viridis_c("Proportion of Individuals",limits=c(0,max(prop_df$proportion)))+
-                xlab("Days post infection")
-
-vaxplot <- prop_df %>%filter(status=="Vaccinee") %>%
-        distinct(isotype,antigen_pretty,`Age Group`,status) %>%
-        expand_grid(prop_df %>%
-                            filter(status=="Vaccinee") %>%
-                            distinct(peak_day_group)) %>%
-        left_join(prop_df %>% filter(status=="Vaccinee")) %>%
-        mutate(proportion=ifelse(is.na(proportion),0,proportion)) %>% 
-        mutate(`Peak Day`=factor(peak_day_group,
-                                     levels=c("0","7","21","44","90","180+"))) %>%
-        ggplot(aes(y=`Age Group`,x=`Peak Day`))+
-                geom_tile(aes(fill=proportion))+
-                facet_grid(isotype~antigen_pretty)+
-                scale_fill_viridis_c("Proportion of Individuals",limits=c(0,max(prop_df$proportion)))+
-                xlab("Days post first dose")
-
-plot_grid(case_plot+ theme_bw()+
-                  theme(legend.position = "right"),
-          vaxplot+theme_bw()+
-                  theme(legend.position = "none"),ncol=1,
-          labels=c("A","B")
-          )
+# prop_df <- analysisData$netMFI_data$long_data %>%
+#                 left_join(antigen_df) %>%
+#                 filter(test_type=="Luminex") %>%
+#                 filter(status %in% c("Case","Vaccinee")) %>%
+#                 filter(antigen_pretty  %in% c("CT-B","Ogawa OSP","Inaba OSP"))%>%
+#                 mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) %>%
+#                 mutate(`Age Group`=ifelse(age<18,"<18 years","18+ years")) %>%
+#                 group_by(isotype,antigen_pretty,`Age Group`,status,id) %>%
+#                 summarize(peak_day=min(day[value==max(value)])) %>% 
+#                 mutate(peak_day_group=ifelse(peak_day>=180,
+#                                              "180+",as.character(peak_day))) %>%
+#                 group_by(isotype,antigen_pretty,`Age Group`,status,peak_day_group) %>%
+#                 count() %>%
+#                 group_by(isotype,antigen_pretty,`Age Group`,status)%>%
+#                 mutate(proportion=n/sum(n)) %>%
+#                 ungroup()
+# 
+# 
+# case_plot<- prop_df %>%filter(status=="Case") %>%
+#         distinct(isotype,antigen_pretty,`Age Group`,status) %>%
+#         expand_grid(prop_df %>%
+#                             filter(status=="Case") %>%
+#                             distinct(peak_day_group)) %>%
+#         left_join(prop_df %>% filter(status=="Case")) %>%
+#         mutate(proportion=ifelse(is.na(proportion),0,proportion)) %>% 
+#         mutate(`Peak Day`=factor(peak_day_group,
+#                                      levels=c("2","7","30","90","180+"))) %>%
+#         ggplot(aes(y=`Age Group`,x=`Peak Day`))+
+#                 geom_tile(aes(fill=proportion))+
+#                 facet_grid(isotype~antigen_pretty)+
+#                 scale_fill_viridis_c("Proportion of Individuals",limits=c(0,max(prop_df$proportion)))+
+#                 xlab("Days post infection")
+# 
+# vaxplot <- prop_df %>%filter(status=="Vaccinee") %>%
+#         distinct(isotype,antigen_pretty,`Age Group`,status) %>%
+#         expand_grid(prop_df %>%
+#                             filter(status=="Vaccinee") %>%
+#                             distinct(peak_day_group)) %>%
+#         left_join(prop_df %>% filter(status=="Vaccinee")) %>%
+#         mutate(proportion=ifelse(is.na(proportion),0,proportion)) %>% 
+#         mutate(`Peak Day`=factor(peak_day_group,
+#                                      levels=c("0","7","21","44","90","180+"))) %>%
+#         ggplot(aes(y=`Age Group`,x=`Peak Day`))+
+#                 geom_tile(aes(fill=proportion))+
+#                 facet_grid(isotype~antigen_pretty)+
+#                 scale_fill_viridis_c("Proportion of Individuals",limits=c(0,max(prop_df$proportion)))+
+#                 xlab("Days post first dose")
+# 
+# plot_grid(case_plot+ theme_bw()+
+#                   theme(legend.position = "right"),
+#           vaxplot+theme_bw()+
+#                   theme(legend.position = "none"),ncol=1,
+#           labels=c("A","B")
+#           )
 
 ```
 
@@ -456,60 +496,60 @@ Points represent 1000 draws from the posterior distribution for the average indi
 
 ```{r kinetics-HPD-1, eval=TRUE}
 
-# fit_list <- read_rds("source/final_code/vax_strategy/generated_rds/exponential_fits/fit_list_netMFI.rds")
-fit_df_1000 <- read_rds("source/final_code/vax_strategy/generated_rds/exponential_fits/fit_df_1000_netMFI.rds")
-
-
-#get plot together
-exp_plot_df <- fit_df_1000 %>% 
-        mutate(antigen=str_remove(full_test,"Luminex_Ig[G|A|M]_")) %>%
-        mutate(isotype=str_extract(full_test,"Ig[G|A|M]")) %>%
-        left_join(antigen_df, by="antigen") %>%
-        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) 
-
-
-# HPD graph
-exp_plot_df %>% 
-                filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
-        mutate(antigen_pretty=factor(antigen_pretty,
-                                     levels=c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA"))) %>%
-        filter(status!="Child Vaccinee") %>%
-        ggplot(aes(x=halflife,y=foldchange,col=status)) +
-        geom_point(alpha=0.01)+
-        stat_hpd_2d(fill=NA,n=100)+
-        theme_bw()+
-        geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee") %>%
-                  filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")),
-                 sides="l",alpha=0.01
-                 )+
-        geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee")%>%
-                  filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
-                        group_by(antigen_pretty,isotype) %>%
-                 summarize(lb=quantile(foldchange,0.025),
-                           ub=quantile(foldchange,0.975)
-                           ) %>%
-                         gather(bound,foldchange,-c(isotype,antigen_pretty)) %>%
-                         mutate(halflife=2,
-                                status="Child Vaccinee"
-                                ),
-                 sides="l"
-        )+
-        facet_grid(isotype~antigen_pretty)+
-        scale_color_manual("Individual",
-                           values=RColorBrewer::brewer.pal(12,"Paired")[c(5,1,6,2)]#[c(3,9,4,10)]
-                           )+
-
-
-        scale_y_continuous("Average fold-change",trans="log2",
-                           breaks = c(1,4,16,64,256,1024),limits=c(1,1024)
-        )+
-        scale_x_continuous("Half-life (days)", trans="log2",
-                           breaks=c(7,30,180,720),limits=c(1,3000)
-        )+
-        geom_hline(yintercept=1,lty=2,col="grey")+
-        theme(panel.grid.minor = element_blank(),
-              legend.position = "right"
-        )
+# # fit_list <- read_rds("source/final_code/vax_strategy/generated_rds/exponential_fits/fit_list_netMFI.rds")
+# fit_df_1000 <- read_rds("source/final_code/vax_strategy/generated_rds/exponential_fits/fit_df_1000_netMFI.rds")
+# 
+# 
+# #get plot together
+# exp_plot_df <- fit_df_1000 %>% 
+#         mutate(antigen=str_remove(full_test,"Luminex_Ig[G|A|M]_")) %>%
+#         mutate(isotype=str_extract(full_test,"Ig[G|A|M]")) %>%
+#         left_join(antigen_df, by="antigen") %>%
+#         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM"))) 
+# 
+# 
+# # HPD graph
+# exp_plot_df %>% 
+#                 filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
+#         mutate(antigen_pretty=factor(antigen_pretty,
+#                                      levels=c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA"))) %>%
+#         filter(status!="Child Vaccinee") %>%
+#         ggplot(aes(x=halflife,y=foldchange,col=status)) +
+#         geom_point(alpha=0.01)+
+#         stat_hpd_2d(fill=NA,n=100)+
+#         theme_bw()+
+#         geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee") %>%
+#                   filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")),
+#                  sides="l",alpha=0.01
+#                  )+
+#         geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee")%>%
+#                   filter(antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
+#                         group_by(antigen_pretty,isotype) %>%
+#                  summarize(lb=quantile(foldchange,0.025),
+#                            ub=quantile(foldchange,0.975)
+#                            ) %>%
+#                          gather(bound,foldchange,-c(isotype,antigen_pretty)) %>%
+#                          mutate(halflife=2,
+#                                 status="Child Vaccinee"
+#                                 ),
+#                  sides="l"
+#         )+
+#         facet_grid(isotype~antigen_pretty)+
+#         scale_color_manual("Individual",
+#                            values=RColorBrewer::brewer.pal(12,"Paired")[c(5,1,6,2)]#[c(3,9,4,10)]
+#                            )+
+# 
+# 
+#         scale_y_continuous("Average fold-change",trans="log2",
+#                            breaks = c(1,4,16,64,256,1024),limits=c(1,1024)
+#         )+
+#         scale_x_continuous("Half-life (days)", trans="log2",
+#                            breaks=c(7,30,180,720),limits=c(1,3000)
+#         )+
+#         geom_hline(yintercept=1,lty=2,col="grey")+
+#         theme(panel.grid.minor = element_blank(),
+#               legend.position = "right"
+#         )
 
 ```
 
@@ -523,45 +563,45 @@ Points represent 1000 draws from the posterior distribution for the average indi
 
 ```{r kinetics-HPD-2, eval=TRUE}
 
-exp_plot_df %>% 
-                filter(!antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
-        filter(status!="Child Vaccinee") %>%
-        ggplot(aes(x=halflife,y=foldchange,col=status)) +
-        geom_point(alpha=0.01)+
-        stat_hpd_2d(fill=NA,n=100)+
-        theme_bw()+
-        geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee") %>%
-                  filter(!antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")),
-                 sides="l",alpha=0.01
-                 )+
-        geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee")%>%
-                  filter(!antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
-                        group_by(antigen_pretty,isotype) %>%
-                 summarize(lb=quantile(foldchange,0.025),
-                           ub=quantile(foldchange,0.975)
-                           ) %>%
-                         gather(bound,foldchange,-c(isotype,antigen_pretty)) %>%
-                         mutate(halflife=2,
-                                status="Child Vaccinee"
-                                ),
-                 sides="l"
-        )+
-        facet_grid(isotype~antigen_pretty)+
-        scale_color_manual("Individual",
-                           values=RColorBrewer::brewer.pal(12,"Paired")[c(5,1,6,2)]#[c(3,9,4,10)]
-                           )+
-
-
-        scale_y_continuous("Average fold-change",trans="log2",
-                           breaks = c(1,4,16,64,256,1024),limits=c(1,1024)
-        )+
-        scale_x_continuous("Half-life (days)", trans="log2",
-                           breaks=c(7,30,180,720),limits=c(1,3000)
-        )+
-        geom_hline(yintercept=1,lty=2,col="grey")+
-        theme(panel.grid.minor = element_blank(),
-              legend.position = "right"
-        )
+# exp_plot_df %>% 
+#                 filter(!antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
+#         filter(status!="Child Vaccinee") %>%
+#         ggplot(aes(x=halflife,y=foldchange,col=status)) +
+#         geom_point(alpha=0.01)+
+#         stat_hpd_2d(fill=NA,n=100)+
+#         theme_bw()+
+#         geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee") %>%
+#                   filter(!antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")),
+#                  sides="l",alpha=0.01
+#                  )+
+#         geom_rug(data=exp_plot_df %>% filter(status=="Child Vaccinee")%>%
+#                   filter(!antigen_pretty %in% c("Ogawa OSP","Inaba OSP","CT-B","O139 OSP","TcpA")) %>%
+#                         group_by(antigen_pretty,isotype) %>%
+#                  summarize(lb=quantile(foldchange,0.025),
+#                            ub=quantile(foldchange,0.975)
+#                            ) %>%
+#                          gather(bound,foldchange,-c(isotype,antigen_pretty)) %>%
+#                          mutate(halflife=2,
+#                                 status="Child Vaccinee"
+#                                 ),
+#                  sides="l"
+#         )+
+#         facet_grid(isotype~antigen_pretty)+
+#         scale_color_manual("Individual",
+#                            values=RColorBrewer::brewer.pal(12,"Paired")[c(5,1,6,2)]#[c(3,9,4,10)]
+#                            )+
+# 
+# 
+#         scale_y_continuous("Average fold-change",trans="log2",
+#                            breaks = c(1,4,16,64,256,1024),limits=c(1,1024)
+#         )+
+#         scale_x_continuous("Half-life (days)", trans="log2",
+#                            breaks=c(7,30,180,720),limits=c(1,3000)
+#         )+
+#         geom_hline(yintercept=1,lty=2,col="grey")+
+#         theme(panel.grid.minor = element_blank(),
+#               legend.position = "right"
+#         )
 
 
 ```
@@ -575,31 +615,31 @@ The median estimate duration of half-life (in days) and the median estimate incr
 
 ```{r kinetics-table, eval=TRUE}
 
-exp_plot_df %>% select(.draw,antigen_pretty,isotype,status, foldchange, halflife) %>%
-        gather(parameter,value, -c(antigen_pretty,isotype,status,.draw)) %>%
-                group_by(antigen_pretty,isotype,status,parameter) %>%
-                summarize(
-                        med = median(value),
-                        lb = quantile(value,0.025),
-                        ub = quantile(value,0.975)
-                ) %>%
-        mutate(tab_cell=ifelse(parameter=="foldchange",
-                        paste0(round(med,1)," (",round(lb,1),"-",round(ub,1),")"),                      
-                        paste0(round(med,0)," (",round(lb,0),"-",round(ub,0),")")                            
-                               )) %>%
-        select(`Isotype`=isotype,
-               `Antigen`=antigen_pretty,
-               `Status`=status,parameter,tab_cell) %>%
-        spread(parameter,tab_cell) %>%
-        rename(`Half Life (95% CI) in days`=halflife,
-                                 `Average Fold-Change (95% CI)`=foldchange) %>%
-                    flextable::flextable() %>%
-                    flextable::merge_v(j="Isotype") %>%
-                    flextable::valign(j="Isotype",valign = "top") %>%
-                    flextable::merge_v(j="Antigen") %>%
-                    flextable::valign(j="Antigen",valign = "top") %>%
-                    flextable::fontsize(size = 9,part="all") %>%
-                    flextable::autofit()
+# exp_plot_df %>% select(.draw,antigen_pretty,isotype,status, foldchange, halflife) %>%
+#         gather(parameter,value, -c(antigen_pretty,isotype,status,.draw)) %>%
+#                 group_by(antigen_pretty,isotype,status,parameter) %>%
+#                 summarize(
+#                         med = median(value),
+#                         lb = quantile(value,0.025),
+#                         ub = quantile(value,0.975)
+#                 ) %>%
+#         mutate(tab_cell=ifelse(parameter=="foldchange",
+#                         paste0(round(med,1)," (",round(lb,1),"-",round(ub,1),")"),                      
+#                         paste0(round(med,0)," (",round(lb,0),"-",round(ub,0),")")                            
+#                                )) %>%
+#         select(`Isotype`=isotype,
+#                `Antigen`=antigen_pretty,
+#                `Status`=status,parameter,tab_cell) %>%
+#         spread(parameter,tab_cell) %>%
+#         rename(`Half Life (95% CI) in days`=halflife,
+#                                  `Average Fold-Change (95% CI)`=foldchange) %>%
+#                     flextable::flextable() %>%
+#                     flextable::merge_v(j="Isotype") %>%
+#                     flextable::valign(j="Isotype",valign = "top") %>%
+#                     flextable::merge_v(j="Antigen") %>%
+#                     flextable::valign(j="Antigen",valign = "top") %>%
+#                     flextable::fontsize(size = 9,part="all") %>%
+#                     flextable::autofit()
 
 
 

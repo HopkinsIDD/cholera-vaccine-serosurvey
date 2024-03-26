@@ -39,8 +39,65 @@ final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
 
 ```
 
+## Study Population
 
-## Table 1:Individual characteristics of culture confirmed cholera patients and vaccinated individuals
+```{r}
+final_wide %>%
+        filter(cohort %in% c("BGD Vaccinee","HTI Vaccinee")) %>%
+        group_by(cohort)%>%
+        summarize(samples=n(),
+                  individuals=length(unique(id)),
+                  under10=length(unique(id[age<10])),
+                  male=length(unique(id[sex=="male"]))
+                  ) %>%
+        mutate(under10=glue::glue("{under10} ({round(under10/individuals,2)*100})"),
+               male=glue::glue("{male} ({round(male/individuals,2)*100})")
+               )
+        
+
+
+final_wide %>%
+        filter(cohort %in% c("SMIC/PIC")) %>%
+        filter(status=="Case")%>%
+        group_by(cohort)%>%
+        summarize(samples=n(),
+                  individuals=length(unique(id)),
+                  under10=length(unique(id[age<10])),
+                  male=length(unique(id[sex=="male"])),
+                  culture=length(unique(id[culture=="O1-Ogawa"]))
+                  ) %>%
+        mutate(under10=glue::glue("{under10} ({round(under10/individuals,2)*100})"),
+               male=glue::glue("{male} ({round(male/individuals,2)*100})"),
+               culture=glue::glue("{culture} ({round(culture/individuals,2)*100})")
+               )
+
+final_wide %>%
+        filter(status=="Contact"|cohort=="ETEC Challenge") %>%
+        group_by(cohort)%>%
+        summarize(samples=n(),
+                  individuals=length(unique(id)))
+
+```
+
+
+```{r}
+
+final_wide %>%
+        filter(cohort=="BGD Vaccinee") %>%
+        count(day)
+
+final_wide %>%
+        filter(cohort=="HTI Vaccinee") %>%
+        mutate(individuals=length(unique(id))) %>%
+        count(day,individuals) %>%
+        mutate(percent=round(n/individuals,2)*100)
+
+```
+
+
+
+
+### Table 1:Individual characteristics of culture confirmed cholera patients and vaccinated individuals
 Serological data were also available for three uninfected household contacts of Bangladeshi cases enrolled with measurements taken at 2, 7, and 30 days after enrollment of the initial case
 
 
@@ -102,7 +159,7 @@ tab1_df %>%
 
 \pagebreak
 
-## Figure 1: Multiplex bead assay measurements of IgG, IgM, and IgA against V. cholerae O1 antigens among vaccinated participants 
+### Figure 1: Multiplex bead assay measurements of IgG, IgM, and IgA against V. cholerae O1 antigens among vaccinated participants 
 
 Y-axis indicates the log (base 10) of the relative antibody units (RAU) with limits at 10^-2 and 10-5. X-axis is in days and is square-root transformed. Each colored line indicates individual trajectories over time. The solid lines are Loess smooth functions. Rug plots show measurements from confirmed cases and uninfected household contacts classified within a 180-day infection window (black) and outside a 180-day infection window (purple).
 
@@ -306,7 +363,7 @@ plot_grid(f2a,f2b,ncol=1,
 ```
 
 
-## Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days). 
+### Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days). 
 
 ```{r f3-loocv, eval=TRUE,fig.width=6,fig.height=10}
 
@@ -538,7 +595,7 @@ plot_grid(f3a+ggtitle("Cases and uninfected\ncontacts only")+
 
 ```
 
-## Figure 4: Model performance to distinguish recently infected individuals, recently vaccinated individuals, and individuals neither recently infected nor vaccinated
+### Figure 4: Model performance to distinguish recently infected individuals, recently vaccinated individuals, and individuals neither recently infected nor vaccinated
 
 ```{r f4-three-class, eval=FALSE,fig.width=5.5,fig.height=9}
 
