@@ -1,3 +1,10 @@
+rm(list=ls())
+
+final_df <- read_rds("data/generated_data/analysis_data/final_df.rds")
+
+source("code/R/packages.R")
+source("code/R/utils.R")
+
 #boot strap GM MFI ratio
 samples_vax_child <- final_df %>%
         filter(status=="Vaccinee",age<10,day==0,cohort=="BGD Vaccinee") %>%
@@ -48,9 +55,9 @@ for(i in 1:1000){
                 tmp_sample_case_adult
         ) %>% 
                 left_join(baseline_sero_data,by=c("sample", "status", "Age Group")) %>%
-                group_by(isotype,antigen,`Age Group`,status) %>%
+                group_by(isotype,antigen_pretty,`Age Group`,status) %>%
                 summarize(avg_value=mean(RAU_value)) %>%
-                group_by(isotype,antigen,`Age Group`) %>%
+                group_by(isotype,antigen_pretty,`Age Group`) %>%
                 summarize(difference=avg_value[status=="Vaccinee"]-avg_value[status=="Case"]) %>%
                 mutate(RAU_ratio=10^difference)
         
@@ -63,5 +70,5 @@ for(i in 1:1000){
 }
 
 
-write_rds(bootDF,"source/final_code/vax_strategy/generated_rds/bootDF.rds")
+write_rds(bootDF,"data/generated_data/analysis_objects/bootDF.rds")
 

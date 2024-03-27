@@ -29,6 +29,32 @@ final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
 #                 generate_MDS(regex_string="CtxB") %>%  mutate(variables="CtxB")
 # )
 
+baseline_sero_data <- final_df %>%
+        filter((status=="Vaccinee" & day %in% c(0,3))|status=="Case" & day==2) %>%
+        group_by(id) %>%
+        filter(day ==min(day)) %>%
+        filter(!id %in% c("IMS_A018","IMS_B021")) %>%
+        select(id,status,cohort,antigen_pretty,isotype,baseline=RAU_value)
+                       
+
+peak_sero_data <- final_df %>% 
+        filter(status %in% c("Vaccinee","Case")) %>%
+        group_by(id,antigen_pretty,isotype) %>%
+        slice_max(order_by=RAU_value,n=1,with_ties = FALSE) %>%
+        ungroup()%>%
+        filter(!id %in% c("IMS_A018","IMS_B021"))%>%
+        select(id,status,cohort,antigen_pretty,isotype,peak=RAU_value)
+
+
+baseline_sero_data %>%
+        left_join(peak_sero_data) %>%
+        mutate(diff=peak-baseline) %>%
+        group_by(antigen_pretty,isotype,cohort) %>%
+        summarize(gmt=10^mean(diff)) %>%
+        ungroup() %>%filter(gmt>4) %>% 
+        distinct(antigen_pretty)
+
+
 
 compare_data_wide <- final_df %>%
         # only individuals from bandladesh
@@ -43,11 +69,11 @@ compare_data_wide <- final_df %>%
 
 mds_obj <- bind_rows(
         compare_data_wide %>% filter(day<=45) %>%
-                generate_MDS() %>% mutate(time_window="<=45 days"),
+                generate_MDS(regex_string="Ogawa|Inaba|TcpA|CtxB|LT-B|LTh|CTHT|IgG_O139") %>% mutate(time_window="<=45 days"),
         compare_data_wide %>% filter(day>45 & day<=120)%>%
-                generate_MDS() %>% mutate(time_window="46-120 days"),
+                generate_MDS(regex_string="Ogawa|Inaba|TcpA|CtxB|LT-B|LTh|CTHT|IgG_O139") %>% mutate(time_window="46-120 days"),
         compare_data_wide %>% filter(day>120 & day<=200)%>%
-                generate_MDS() %>% mutate(time_window="121-200 days")
+                generate_MDS(regex_string="Ogawa|Inaba|TcpA|CtxB|LT-B|LTh|CTHT|IgG_O139") %>% mutate(time_window="121-200 days")
 )%>%
         mutate(time_window=factor(time_window,
                                   levels=c("<=45 days",
@@ -106,12 +132,14 @@ for (i in 1:n_permutations) {
         
 }
 
+write_rds(permuted_distances,"data/generated_data/analysis_objects/permuted_distances.rds")
 
 permuted_distances %>%
         group_by(time_window) %>%
-        summarize(quantile(euclidean,0.975))
+        summarize(quantile(euclidean,0.99))
 
 
+permuted_distances %>% ggplot(aes(x=euclidean))+geom_histogram()+facet_wrap(.~time_window)
 
 
 # #try the pca analysis
