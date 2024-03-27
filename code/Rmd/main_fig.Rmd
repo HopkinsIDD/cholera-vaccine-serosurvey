@@ -687,6 +687,8 @@ f3d <- f3_spec_df %>%
         xlab("Population")
         
 
+f3_spec_df
+
 plot_grid(f3a+ggtitle("Cases and uninfected\ncontacts only")+
                   theme(legend.position = c(0.25,0.4),
                         legend.background = element_rect(fill = "white",color = "black"))
