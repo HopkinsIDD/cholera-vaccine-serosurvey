@@ -182,7 +182,7 @@ raw_df_list <- list(
                 filter(age>=10),
         `Haitian 18+ years` = filter(raw_df, cohort=="HTI Vaccinee") ,
         
-        `All Vaccinees` = raw_df
+        `All Vaccinees` = filter(raw_df, cohort %in% c("HTI Vaccinee","BGD Vaccinee"))
         
 )
 

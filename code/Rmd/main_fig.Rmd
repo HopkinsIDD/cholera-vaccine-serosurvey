@@ -31,7 +31,8 @@ rm(list=ls())
 
 source("code/R/packages.R")
 source("code/R/utils.R")
-# source("code/R/load-data.R")
+
+# new_qc.R and load-data.R to see how final_df and final_wide are created
 
 final_df <- read_rds("data/generated_data/analysis_data/final_df.rds")
 final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
@@ -39,7 +40,10 @@ final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
 
 ```
 
-## Study Population
+
+## Main Text 
+
+### Study Population
 
 ```{r}
 final_wide %>%
@@ -227,21 +231,22 @@ fig1_df %>%
 
 The proportion of Bangladeshi vaccinees predicted to be cases (using the a previously published random forest model trained on anti-CT-B, anti-Ogawa OSP, anti-Inaba OSP IgG measurements) at each time point is shown (A). The two dimensions calculated from the multidimensional scaling analyses are shown in each scatterplot for each denoted time window (B). Both Haitian and Bangladeshi vaccinees were included.
 
-```{r misclassification, eval=FALSE}
+```{r misclassification-code, eval=FALSE}
 
 # Misclassification.R provides predictions for misclassification of vaccinees
 source("code/R/misclassification.R")
 
 ```
 
-```{r multidimensional-scaling, eval=FALSE}
+```{r mds-code, eval=FALSE}
 
 # multidimensional-scaling provides object with mds analysis
 source("code/R/multidimensional-scaling.R")
 
 ```
 
-```{r eval=TRUE}
+```{r misclassify-mds-figure, eval=TRUE,fig.width=9.1,fig.height=7}
+
 
 
 #get data for misclassification
@@ -250,13 +255,6 @@ tvfpr_df <- read_rds("data/generated_data/analysis_objects/misclassification/tvf
 #get mds measurements
 mds_obj <- read_rds("data/generated_data/analysis_objects/mds/mds_obj.rds")
 permuted_distances <- read_rds("data/generated_data/analysis_objects/mds/permuted_distances.rds")
-
-
-
-
-```
-
-```{r eval=TRUE}
 
 
 misclassify_df%>%
@@ -303,13 +301,6 @@ mds_obj %>%
 permuted_distances %>%
         group_by(time_window) %>%
         summarize(quantile(euclidean,0.999))
-
-
-
-```
-
-
-```{r eval=TRUE,fig.width=9.1,fig.height=7}
 
 f2a <- misclassify_df %>%
         group_by(day,end_window,cohort) %>%
@@ -373,213 +364,13 @@ plot_grid(f2a,f2b,ncol=1,
 
 ### Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days). 
 
-```{r}
+```{r loocv-code, eval=FALSE}
 
-#get sensitivty estimates
-
-#load loocv objects
-loocv_spec_list <- read_rds(
-        paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_list.rds")
-)
-loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list_SMICPIC.rds")
-
-loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds")
-
-
-#load stan fit
-original_sens_fitdata <-loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$data
-original_sens_spread <- loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$fit %>% 
-        spread_draws(`(Intercept)`,
-                     b[term,group],
-                     day1,day2,day3
-        )
-
-#for loop through potential days since infection
-original_sens_obj <- data.frame()
-original_sens_beta_draws <-data.frame()
-
-
-for(t in 1:200){
-        
-        cat(t,"\n")
-        time <- log(t) -mean(log(original_sens_fitdata$new_day))
-        
-        #get individual sensitivities for simulation
-        tmp_df <- original_sens_spread %>%
-                mutate(logit_theta_j=`(Intercept)` + b+
-                               day1*time +
-                               day2*time^2+
-                               day3*time^3
-                       
-                ) %>%
-                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-                group_by(group) %>%
-                summarize(theta=mean(theta_j),n()) %>% #average across individuals here
-                mutate(days_ago=t)%>%
-                rename(pos_ID=group,
-                       ind_sens=theta
-                )
-        
-        original_sens_obj <- bind_rows(original_sens_obj,tmp_df)
-        
-        #get sensitivity distribution for seroincidence estimation
-        tmp_dist <- original_sens_spread %>%
-                mutate(logit_theta_j=`(Intercept)` + b+
-                               day1*time +
-                               day2*time^2+
-                               day3*time^3
-                       
-                ) %>%
-                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-                group_by(.draw) %>%
-                summarize(theta=mean(theta_j),n()) %>%
-                mutate(days_ago=t)
-        
-        original_sens_beta_draws <-bind_rows(
-                original_sens_beta_draws,
-                tmp_dist
-        )
-}
-
-
-#fit beta distribution
-original_sens_beta_draws %>% group_by(.draw)%>%
-        summarize(sens=mean(theta)) %>%
-        median_qi()
-
-
-
-#Alternative model 1
-#load stan fit
-alt1_sens_fitdata <-loocv_sens_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$data
-alt1_sens_spread <- loocv_sens_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$fit %>% 
-        spread_draws(`(Intercept)`,
-                     b[term,group],
-                     day1,day2,day3
-        )
-
-#for loop through potential days since infection
-alt1_sens_obj <- data.frame()
-alt1_sens_beta_draws <-data.frame()
-
-
-for(t in 1:200){
-        
-        cat(t,"\n")
-        time <- log(t) -mean(log(alt1_sens_fitdata$new_day))
-        
-        #get individual sensitivities for simulation
-        tmp_df <- alt1_sens_spread %>%
-                mutate(logit_theta_j=`(Intercept)` + b+
-                               day1*time +
-                               day2*time^2+
-                               day3*time^3
-                       
-                ) %>%
-                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-                group_by(group) %>%
-                summarize(theta=mean(theta_j),n()) %>% #average across individuals here
-                mutate(days_ago=t)%>%
-                rename(pos_ID=group,
-                       ind_sens=theta
-                )
-        
-        alt1_sens_obj <- bind_rows(alt1_sens_obj,tmp_df)
-        
-        #get sensitivity distribution for seroincidence estimation
-        tmp_dist <- alt1_sens_spread %>%
-                mutate(logit_theta_j=`(Intercept)` + b+
-                               day1*time +
-                               day2*time^2+
-                               day3*time^3
-                       
-                ) %>%
-                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-                group_by(.draw) %>%
-                summarize(theta=mean(theta_j),n()) %>%
-                mutate(days_ago=t)
-        
-        alt1_sens_beta_draws <-bind_rows(
-                alt1_sens_beta_draws,
-                tmp_dist
-        )
-}
-
-
-#fit beta distribution
-alt1_sens_beta_draws %>% group_by(.draw)%>%
-        summarize(sens=mean(theta)) %>%
-        median_qi()
-
-
-
-#Alternative model 2
-#load stan fit
-alt2_sens_fitdata <-loocv_sens_list$`All Variables`$all_fitdata$`200-day`$Case$data
-alt2_sens_spread <- loocv_sens_list$`All Variables`$all_fitdata$`200-day`$Case$fit %>% 
-        spread_draws(`(Intercept)`,
-                     b[term,group],
-                     day1,day2,day3
-        )
-
-#for loop through potential days since infection
-alt2_sens_obj <- data.frame()
-alt2_sens_beta_draws <-data.frame()
-
-
-for(t in 1:200){
-        
-        cat(t,"\n")
-        time <- log(t) -mean(log(alt2_sens_fitdata$new_day))
-        
-        #get individual sensitivities for simulation
-        tmp_df <- alt2_sens_spread %>%
-                mutate(logit_theta_j=`(Intercept)` + b+
-                               day1*time +
-                               day2*time^2+
-                               day3*time^3
-                       
-                ) %>%
-                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-                group_by(group) %>%
-                summarize(theta=mean(theta_j),n()) %>% #average across individuals here
-                mutate(days_ago=t)%>%
-                rename(pos_ID=group,
-                       ind_sens=theta
-                )
-        
-        alt2_sens_obj <- bind_rows(alt2_sens_obj,tmp_df)
-        
-        #get sensitivity distribution for seroincidence estimation
-        tmp_dist <- alt2_sens_spread %>%
-                mutate(logit_theta_j=`(Intercept)` + b+
-                               day1*time +
-                               day2*time^2+
-                               day3*time^3
-                       
-                ) %>%
-                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-                group_by(.draw) %>%
-                summarize(theta=mean(theta_j),n()) %>%
-                mutate(days_ago=t)
-        
-        alt2_sens_beta_draws <-bind_rows(
-                alt2_sens_beta_draws,
-                tmp_dist
-        )
-}
-
-
-#fit beta distribution
-alt2_sens_beta_draws %>% group_by(.draw)%>%
-        summarize(sens=mean(theta)) %>%
-        median_qi()
-
+source("loocv.R")
 
 ```
 
-
-```{r f3-loocv, eval=TRUE,fig.width=6,fig.height=10}
+```{r loocv-figure, eval=TRUE,fig.width=6,fig.height=10}
 
 f3_loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds") %>%
         filter(base_data_name!="bgd_fitdata")%>%
@@ -811,148 +602,549 @@ plot_grid(f3a+ggtitle("Cases and uninfected\ncontacts only")+
 
 ```
 
-### Figure 4: Model performance to distinguish recently infected individuals, recently vaccinated individuals, and individuals neither recently infected nor vaccinated
 
-```{r f4-three-class, eval=FALSE,fig.width=5.5,fig.height=9}
+### Figure 4. Simulated serological surveys in settings with varying levels of vaccination coverage using multiple strategies to calculate seroincidence. 
 
-confusion_matrix_df <- read_rds("data/generated_data/loocv_3class_df.rds") %>%
-        count(variables,three_class,prediction) %>%
-                group_by(variables,three_class) %>%
-                mutate(proportion=n/sum(n)) %>%
-        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
-        mutate(prediction=str_replace(prediction,"Recently","Recently "))
+The number of days since the first dose of the campaign is shown in parentheses. Blue line violin plots show the distribution of 100 estimates of seroincidence using different strategies (x-axis) at various levels of vaccine coverage (top of each panel). Blue dot indicates the average seroincidence estimate. Each simulated survey had 1000 persons. The true incidence was 10 infections per 100 in 200 days as shown in the grey violin plots. 
 
 
-confusion_plot <- confusion_matrix_df %>%
-        ggplot(aes(x=three_class,y=prediction))+
-                geom_tile(aes(fill=100*proportion))+
-                facet_wrap(.~variables)+
-                geom_text(aes(label=scales::percent(round(proportion,2),1)))+
-        scale_fill_distiller("Percent\nClassified",palette = "Oranges",direction = 1)+
-        xlab("Observed Class")+
-        ylab("Predicted Class")+
-        theme_cowplot()
+```{r simulation-results???}
+
+#get sensitivty estimates
+
+#load loocv objects
+loocv_spec_list <- read_rds(
+        paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_list.rds")
+)
+loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list_SMICPIC.rds")
+
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds")
 
 
-incidence_lvls <- c(0.05,0.10,0.15)
-coverage_lvls <- seq(0,1,0.02)
-
-
-# sens3_df <- confusion_matrix_df %>%
-#         mutate(three_class=str_replace(three_class,"\n"," ")) %>%
-#         select(variables,three_class,prediction,proportion)  %>%
-#         filter(three_class==prediction) %>%
-#         select(variables,three_class,sensitivity=proportion)
-
-#get class level sensitivity and specificity
-class_pred_df <- data.frame()
-for( class in c("Recently Infected", "Recently Vaccinated","Neither")){
-        
-        class_pred_df <- bind_rows(
-                class_pred_df,
-                confusion_matrix_df %>%
-        mutate(three_class=str_replace(three_class,"\n"," ")) %>%
-        select(variables,three_class,prediction,proportion)  %>%
-        spread(prediction,proportion) %>%
-        mutate(percent= ifelse(three_class==class,
-                               !!sym(class),
-                               1 - !!sym(class))) %>%
-        mutate(prediction=class) %>%
-        mutate(parameter=ifelse(three_class==class,
-                                "sensitivity","class_specificity"
-                                ))%>%
-        select(variables,three_class, prediction,percent,parameter)
-                
-        )        
-        
-}
-
-#get sensitivity df
-sens_df <- class_pred_df %>% filter(parameter=="sensitivity") %>%
-        spread(parameter,percent) %>%
-        select(-three_class)
-#get specificity df
-spec_df <- class_pred_df %>% filter(parameter=="class_specificity") %>%
-        select(variables,three_class,prediction,percent) %>%
-        spread(three_class,percent) %>%                       
-        expand_grid(incidence=incidence_lvls,coverage=coverage_lvls) %>%
-        mutate(vax_notinf=coverage*(1-incidence),
-               notboth=1-incidence-vax_notinf
-               ) %>% 
-        mutate(specificity=case_when(
-                prediction=="Neither" ~ (`Recently Infected`*incidence + `Recently Vaccinated`*vax_notinf)/(incidence+vax_notinf),
-                prediction=="Recently Infected" ~ (Neither*notboth + `Recently Vaccinated`*vax_notinf)/(notboth+vax_notinf),
-                prediction=="Recently Vaccinated" ~ (Neither*notboth + `Recently Infected`*incidence)/(notboth+incidence)
-        )) %>%        
-        select(-Neither,-`Recently Infected`,-`Recently Vaccinated`)
-
-
-spec_df %>%filter(coverage==0.5) %>%
-        # filter(variables=="All Variables") %>%
-        filter(incidence==0.1)
-
-
-#calculate PPV and NPV
-PV_df <- left_join(sens_df,spec_df)  %>%
-        mutate(
-                PPV= case_when(
-                        prediction=="Neither"~ notboth*sensitivity/(notboth*sensitivity + (1-notboth)*(1-specificity)) ,
-                        prediction=="Recently Infected"~ incidence*sensitivity/(incidence*sensitivity + (1-incidence)*(1-specificity)),
-                        prediction=="Recently Vaccinated"~vax_notinf*sensitivity/(vax_notinf*sensitivity + (1-vax_notinf)*(1-specificity))
-                       ),
-                NPV= case_when(
-                        prediction=="Neither"~ (1-notboth)*specificity/(notboth*(1-sensitivity) + (1-notboth)*(specificity)) ,
-                        prediction=="Recently Infected"~ (1-incidence)*specificity/(incidence*(1-sensitivity) + (1-incidence)*(specificity)),
-                        prediction=="Recently Vaccinated"~ (1-vax_notinf)*specificity/(vax_notinf*(1-sensitivity) + (1-vax_notinf)*(specificity))
-                       )
-
+#load stan fit
+original_sens_fitdata <-loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$data
+original_sens_spread <- loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$fit %>% 
+        spread_draws(`(Intercept)`,
+                     b[term,group],
+                     day1,day2,day3
         )
 
-
-PV_df %>% filter(variables=="All Variables") %>%
-        filter(incidence==0.1) %>%
-        filter(prediction=="Recently Infected") %>%
-        summarize(min(PPV),
-                  max(PPV),
-                  min(NPV),
-                  max(NPV)
-                  )
-
-PV_df %>% filter(variables=="All Variables") %>%
-        filter(incidence==0.1) %>%
-        filter(prediction=="Recently Vaccinated") %>%
-        mutate(combo=PPV+NPV) %>%
-        filter(combo==max(combo))
+#for loop through potential days since infection
+original_sens_obj <- data.frame()
+original_sens_beta_draws <-data.frame()
 
 
-pred_value_plot <- PV_df %>%
-        filter(incidence==0.1)%>%
-        select(variables,prediction,incidence,coverage,PPV,NPV) %>%
-        pivot_longer(c(PPV,NPV),
-                     names_to = "Predictive Value",
-                     values_to = "Percent"
-                     ) %>%
-        ggplot(aes(x=coverage*100,y=Percent*100,col=`Predictive Value`,
-                   lty=variables
-                   ))+
-                geom_line()+
-                facet_grid(.~prediction)+
-                theme_cowplot()+
-                ylab("Percent")+
-                xlab("Coverage (%)")+
-                scale_linetype_discrete("Model")+
-                theme(legend.position = "bottom")
-
-plot_grid(
-        confusion_plot,pred_value_plot,ncol=1,
-        labels = c("A","B")
+for(t in 1:200){
         
-)
+        cat(t,"\n")
+        time <- log(t) -mean(log(original_sens_fitdata$new_day))
+        
+        #get individual sensitivities for simulation
+        tmp_df <- original_sens_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(group) %>%
+                summarize(theta=mean(theta_j),n()) %>% #average across individuals here
+                mutate(days_ago=t)%>%
+                rename(pos_ID=group,
+                       ind_sens=theta
+                )
+        
+        original_sens_obj <- bind_rows(original_sens_obj,tmp_df)
+        
+        #get sensitivity distribution for seroincidence estimation
+        tmp_dist <- original_sens_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(.draw) %>%
+                summarize(theta=mean(theta_j),n()) %>%
+                mutate(days_ago=t)
+        
+        original_sens_beta_draws <-bind_rows(
+                original_sens_beta_draws,
+                tmp_dist
+        )
+}
+
+
+#fit beta distribution
+original_sens_beta_draws %>% group_by(.draw)%>%
+        summarize(sens=mean(theta)) %>%
+        median_qi()
+
+
+
+#Alternative model 1
+#load stan fit
+alt1_sens_fitdata <-loocv_sens_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$data
+alt1_sens_spread <- loocv_sens_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$fit %>% 
+        spread_draws(`(Intercept)`,
+                     b[term,group],
+                     day1,day2,day3
+        )
+
+#for loop through potential days since infection
+alt1_sens_obj <- data.frame()
+alt1_sens_beta_draws <-data.frame()
+
+
+for(t in 1:200){
+        
+        cat(t,"\n")
+        time <- log(t) -mean(log(alt1_sens_fitdata$new_day))
+        
+        #get individual sensitivities for simulation
+        tmp_df <- alt1_sens_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(group) %>%
+                summarize(theta=mean(theta_j),n()) %>% #average across individuals here
+                mutate(days_ago=t)%>%
+                rename(pos_ID=group,
+                       ind_sens=theta
+                )
+        
+        alt1_sens_obj <- bind_rows(alt1_sens_obj,tmp_df)
+        
+        #get sensitivity distribution for seroincidence estimation
+        tmp_dist <- alt1_sens_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(.draw) %>%
+                summarize(theta=mean(theta_j),n()) %>%
+                mutate(days_ago=t)
+        
+        alt1_sens_beta_draws <-bind_rows(
+                alt1_sens_beta_draws,
+                tmp_dist
+        )
+}
+
+
+#fit beta distribution
+alt1_sens_beta_draws %>% group_by(.draw)%>%
+        summarize(sens=mean(theta)) %>%
+        median_qi()
+
+
+
+#Alternative model 2
+#load stan fit
+alt2_sens_fitdata <-loocv_sens_list$`All Variables`$all_fitdata$`200-day`$Case$data
+alt2_sens_spread <- loocv_sens_list$`All Variables`$all_fitdata$`200-day`$Case$fit %>% 
+        spread_draws(`(Intercept)`,
+                     b[term,group],
+                     day1,day2,day3
+        )
+
+#for loop through potential days since infection
+alt2_sens_obj <- data.frame()
+alt2_sens_beta_draws <-data.frame()
+
+
+for(t in 1:200){
+        
+        cat(t,"\n")
+        time <- log(t) -mean(log(alt2_sens_fitdata$new_day))
+        
+        #get individual sensitivities for simulation
+        tmp_df <- alt2_sens_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(group) %>%
+                summarize(theta=mean(theta_j),n()) %>% #average across individuals here
+                mutate(days_ago=t)%>%
+                rename(pos_ID=group,
+                       ind_sens=theta
+                )
+        
+        alt2_sens_obj <- bind_rows(alt2_sens_obj,tmp_df)
+        
+        #get sensitivity distribution for seroincidence estimation
+        tmp_dist <- alt2_sens_spread %>%
+                mutate(logit_theta_j=`(Intercept)` + b+
+                               day1*time +
+                               day2*time^2+
+                               day3*time^3
+                       
+                ) %>%
+                mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
+                group_by(.draw) %>%
+                summarize(theta=mean(theta_j),n()) %>%
+                mutate(days_ago=t)
+        
+        alt2_sens_beta_draws <-bind_rows(
+                alt2_sens_beta_draws,
+                tmp_dist
+        )
+}
+
+
+#fit beta distribution
+alt2_sens_beta_draws %>% group_by(.draw)%>%
+        summarize(sens=mean(theta)) %>%
+        median_qi()
+
 
 ```
 
 
-###OLD STUFF
+```{r simulation-code, eval=FALSE}
+
+source("code/R/simulation.R")
+
+```
+
+
+```{r simulation-figure, eval=TRUE}
+simulation_df <- read_rds("data/generated_data/analysis_objects/simulation/simulation_df_10.rds")
+lambda_df <- read_rds("data/generated_data/analysis_objects/simulation/lambda_df_10.rds")
+sims_original <- read_rds("data/generated_data/analysis_objects/simulation/sims_original_10.rds")
+
+#get the truth form the simulations in the right format
+sims_viz <- filter(simulation_df,campaign_day==21, coverage==0) %>%
+        filter(incidence==0.10)%>%
+                distinct(simulation,truth) %>%
+                mutate(`Ignore 21`=truth,
+                       `Ignore 120`=truth,
+                       `Questionnaire 21`=truth,
+                       `Alternative NA`=truth,
+                       ) %>%
+                select(-truth) %>%
+                gather(new_strategy, truth,-simulation) %>%
+        mutate(new_strategy = factor(new_strategy,
+                                     levels=c("Ignore 21", "Ignore 120",
+                                              "Questionnaire 21", "Alternative NA"
+                                     ),
+                                     labels=c("Original Model\n(21 days)", "Original Model\n(120 days)",
+                                              "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
+        )
+        ) %>%
+        expand_grid(coverage=c("0% Coverage",
+                        "25% Coverage",
+                        "50% Coverage",
+                        "75% Coverage"
+        ))%>%
+        mutate(new_coverage=factor(coverage,
+                                   labels=c("0% Coverage",
+                                            "25% Coverage",
+                                            "50% Coverage",
+                                            "75% Coverage"
+                                   )
+        )) 
+                
+lambda_df  %>%
+        filter(campaign_day == 21 |
+               (adjustment == "Ignore" & campaign_day == 120)|
+               adjustment == "Alternative"
+                       )%>%
+        mutate(new_strategy=paste(adjustment,campaign_day)) %>%
+        mutate(new_strategy = factor(new_strategy,
+                levels=c("Ignore 21", "Ignore 120",
+                         "Questionnaire 21", "Alternative NA"
+                         ),
+                labels=c("Original Model\n(21 days)", "Original Model\n(120 days)",
+                         "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
+                )
+                       ) %>%
+        mutate(new_coverage=factor(coverage,
+                                   labels=c("0% Coverage",
+                                            "25% Coverage",
+                                            "50% Coverage",
+                                            "75% Coverage"
+                                            )
+                                   )) %>%
+        group_by(new_strategy,coverage)%>%
+        mutate(avg_lambda=mean(lambda)) %>%
+        ungroup()%>%
+        select(simulation,new_strategy,new_coverage,lambda,avg_lambda) %>%
+        left_join(sims_viz,by = c("simulation", "new_strategy", "new_coverage")) %>%
+        gather(type,value,-c(simulation,new_strategy, new_coverage, avg_lambda,coverage))%>%
+        ggplot(aes(x=new_strategy))+
+        geom_violin(aes(y=value,col=type,alpha=type),position="identity",fill="grey",
+                    trim=FALSE,scale="area")+
+        scale_color_manual(values=c("blue",NA),na.value = NA)+
+        scale_alpha_manual(values=c(0,0.3))+
+        geom_point(aes(y=avg_lambda),col="blue")+
+        facet_wrap(new_coverage~.)+
+        cowplot::theme_cowplot()+
+        theme(axis.text.x = element_text(angle=45,hjust = 1),
+              legend.position = "none"
+              )+
+        ylab("200-day seroincidence")+
+        xlab("Strategy")
+
+
+lambda_df  %>%
+        filter(adjustment== "Ignore", campaign_day == 21) %>%
+        mutate(new_coverage=factor(coverage,
+                                   labels=c("0% Coverage",
+                                            "25% Coverage",
+                                            "50% Coverage",
+                                            "75% Coverage"
+                                   )
+        )) %>%
+        group_by(new_coverage) %>%
+        summarize(lambda=glue::glue("{round(mean(lambda),2)} {round(min(lambda),2)}-{round(max(lambda),2)}")
+        )
+
+
+lambda_df  %>%
+        filter(campaign_day == 21 |
+                       (adjustment == "Ignore" & campaign_day == 120)|
+                       adjustment == "Alternative"
+        )%>%
+        mutate(new_strategy=paste(adjustment,campaign_day)) %>%
+        mutate(new_strategy = factor(new_strategy,
+                                     levels=c("Ignore 21", "Ignore 120",
+                                              "Questionnaire 21", "Alternative NA"
+                                     ),
+                                     labels=c("Original Model (21 days)", "Original Model (120 days)",
+                                              "Original Model + Questionnaire (21 days)", 
+                                              "Alternative Model 1 (21 days)")
+        )
+        ) %>%
+        filter(coverage==0.5) %>%
+        group_by(new_strategy) %>%
+        summarize(lambda=glue::glue("{round(mean(lambda),2)} {round(min(lambda),2)}-{round(max(lambda),2)}")
+                  )
+
+
+
+```
+
+
+### Figure 5: Model performance to distinguish recently infected individuals, recently vaccinated individuals, and individuals neither recently infected nor vaccinated. 
+
+Samples of recently infected individuals were collected between 5 and 200 days after symptom onset. Samples of recently vaccinated individuals (from Bangladesh and Haiti) were collected between 5 and 200 days after the first dose was given. Samples of individuals who were neither recently infected nor vaccinated were from Bangladeshi cases, Bangladeshi uninfected contacts, Bangladeshi vaccinees, and Haitian vaccinees. 
+
+
+```{r threeclass-code, eval=FALSE}
+
+source("code/R/loocv_3class.R")
+
+```
+
+```{r threeclass-figure, eval=TRUE,fig.width=5.5,fig.height=9}
+
+
+loocv_3class_df <- read_rds("data/generated_data/loocv_3class_df.rds")
+
+
+loocv_3class_df %>%
+        mutate(three_class=factor(three_class),
+               prediction=factor(prediction)
+               ) %>%
+        count(variables,three_class,prediction,.drop=FALSE) %>%
+                group_by(variables,three_class) %>%
+                mutate(proportion=n/sum(n)) %>%
+        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+        ggplot(aes(x=three_class,y=prediction))+
+                geom_tile(aes(fill=100*proportion))+
+                facet_wrap(.~variables)+
+                geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
+        scale_fill_distiller("Percent\nClassified",palette = "Oranges",
+                             direction = 1
+                             )+
+        xlab("Observed Class")+
+        ylab("Predicted Class")+
+        theme_cowplot()
+        # theme(axis.text.x = element_text(angle=45,hjust=1))
+
+# confusion_matrix_df <- read_rds("data/generated_data/loocv_3class_df.rds") %>%
+#         count(variables,three_class,prediction) %>%
+#                 group_by(variables,three_class) %>%
+#                 mutate(proportion=n/sum(n)) %>%
+#         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+#         mutate(prediction=str_replace(prediction,"Recently","Recently "))
+# 
+# 
+# confusion_plot <- confusion_matrix_df %>%
+#         ggplot(aes(x=three_class,y=prediction))+
+#                 geom_tile(aes(fill=100*proportion))+
+#                 facet_wrap(.~variables)+
+#                 geom_text(aes(label=scales::percent(round(proportion,2),1)))+
+#         scale_fill_distiller("Percent\nClassified",palette = "Oranges",direction = 1)+
+#         xlab("Observed Class")+
+#         ylab("Predicted Class")+
+#         theme_cowplot()
+# 
+# 
+# incidence_lvls <- c(0.05,0.10,0.15)
+# coverage_lvls <- seq(0,1,0.02)
+# 
+# 
+# # sens3_df <- confusion_matrix_df %>%
+# #         mutate(three_class=str_replace(three_class,"\n"," ")) %>%
+# #         select(variables,three_class,prediction,proportion)  %>%
+# #         filter(three_class==prediction) %>%
+# #         select(variables,three_class,sensitivity=proportion)
+# 
+# #get class level sensitivity and specificity
+# class_pred_df <- data.frame()
+# for( class in c("Recently Infected", "Recently Vaccinated","Neither")){
+#         
+#         class_pred_df <- bind_rows(
+#                 class_pred_df,
+#                 confusion_matrix_df %>%
+#         mutate(three_class=str_replace(three_class,"\n"," ")) %>%
+#         select(variables,three_class,prediction,proportion)  %>%
+#         spread(prediction,proportion) %>%
+#         mutate(percent= ifelse(three_class==class,
+#                                !!sym(class),
+#                                1 - !!sym(class))) %>%
+#         mutate(prediction=class) %>%
+#         mutate(parameter=ifelse(three_class==class,
+#                                 "sensitivity","class_specificity"
+#                                 ))%>%
+#         select(variables,three_class, prediction,percent,parameter)
+#                 
+#         )        
+#         
+# }
+# 
+# #get sensitivity df
+# sens_df <- class_pred_df %>% filter(parameter=="sensitivity") %>%
+#         spread(parameter,percent) %>%
+#         select(-three_class)
+# #get specificity df
+# spec_df <- class_pred_df %>% filter(parameter=="class_specificity") %>%
+#         select(variables,three_class,prediction,percent) %>%
+#         spread(three_class,percent) %>%                       
+#         expand_grid(incidence=incidence_lvls,coverage=coverage_lvls) %>%
+#         mutate(vax_notinf=coverage*(1-incidence),
+#                notboth=1-incidence-vax_notinf
+#                ) %>% 
+#         mutate(specificity=case_when(
+#                 prediction=="Neither" ~ (`Recently Infected`*incidence + `Recently Vaccinated`*vax_notinf)/(incidence+vax_notinf),
+#                 prediction=="Recently Infected" ~ (Neither*notboth + `Recently Vaccinated`*vax_notinf)/(notboth+vax_notinf),
+#                 prediction=="Recently Vaccinated" ~ (Neither*notboth + `Recently Infected`*incidence)/(notboth+incidence)
+#         )) %>%        
+#         select(-Neither,-`Recently Infected`,-`Recently Vaccinated`)
+# 
+# 
+# spec_df %>%filter(coverage==0.5) %>%
+#         # filter(variables=="All Variables") %>%
+#         filter(incidence==0.1)
+# 
+# 
+# #calculate PPV and NPV
+# PV_df <- left_join(sens_df,spec_df)  %>%
+#         mutate(
+#                 PPV= case_when(
+#                         prediction=="Neither"~ notboth*sensitivity/(notboth*sensitivity + (1-notboth)*(1-specificity)) ,
+#                         prediction=="Recently Infected"~ incidence*sensitivity/(incidence*sensitivity + (1-incidence)*(1-specificity)),
+#                         prediction=="Recently Vaccinated"~vax_notinf*sensitivity/(vax_notinf*sensitivity + (1-vax_notinf)*(1-specificity))
+#                        ),
+#                 NPV= case_when(
+#                         prediction=="Neither"~ (1-notboth)*specificity/(notboth*(1-sensitivity) + (1-notboth)*(specificity)) ,
+#                         prediction=="Recently Infected"~ (1-incidence)*specificity/(incidence*(1-sensitivity) + (1-incidence)*(specificity)),
+#                         prediction=="Recently Vaccinated"~ (1-vax_notinf)*specificity/(vax_notinf*(1-sensitivity) + (1-vax_notinf)*(specificity))
+#                        )
+# 
+#         )
+# 
+# 
+# PV_df %>% filter(variables=="All Variables") %>%
+#         filter(incidence==0.1) %>%
+#         filter(prediction=="Recently Infected") %>%
+#         summarize(min(PPV),
+#                   max(PPV),
+#                   min(NPV),
+#                   max(NPV)
+#                   )
+# 
+# PV_df %>% filter(variables=="All Variables") %>%
+#         filter(incidence==0.1) %>%
+#         filter(prediction=="Recently Vaccinated") %>%
+#         mutate(combo=PPV+NPV) %>%
+#         filter(combo==max(combo))
+# 
+# 
+# pred_value_plot <- PV_df %>%
+#         filter(incidence==0.1)%>%
+#         select(variables,prediction,incidence,coverage,PPV,NPV) %>%
+#         pivot_longer(c(PPV,NPV),
+#                      names_to = "Predictive Value",
+#                      values_to = "Percent"
+#                      ) %>%
+#         ggplot(aes(x=coverage*100,y=Percent*100,col=`Predictive Value`,
+#                    lty=variables
+#                    ))+
+#                 geom_line()+
+#                 facet_grid(.~prediction)+
+#                 theme_cowplot()+
+#                 ylab("Percent")+
+#                 xlab("Coverage (%)")+
+#                 scale_linetype_discrete("Model")+
+#                 theme(legend.position = "bottom")
+# 
+# plot_grid(
+#         confusion_plot,pred_value_plot,ncol=1,
+#         labels = c("A","B")
+#         
+# )
+
+```
+
+## Supplemental Figure
+
+
+### Three class table
+
+```{r eval=FALSE}
+
+loocv_3class_df <- read_rds("data/generated_data/loocv_3class_df.rds")
+
+
+loocv_3class_df %>%
+        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+        mutate(prediction=factor(prediction)) %>%
+        group_by(variables,three_class,cohort,status) %>%
+        mutate(Days=paste0(sort(unique(day)),collapse = ", ")) %>%
+        group_by(variables,three_class,cohort,status,Days,prediction,.drop=FALSE) %>%
+        summarize(n=n(),
+                  ) %>%
+        group_by(variables,three_class,cohort,status,Days)%>%
+        mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%)")) %>%
+        spread(prediction,n) %>%
+        rename(`Observed Class`=three_class,
+               Model=variables) %>%
+        flextable::flextable() %>%
+        flextable::autofit()
+
+```
+
+
+##OLD STUFF
 
 ```{r}
 
@@ -1025,9 +1217,9 @@ PPV_plot <- ppv_df%>%
 ```
 
 
-# Figure 4: External validation
 
 ```{r}
+# Figure 4: External validation
 
 external_df <- read_rds("data/generated_data/external_df.rds")
 
@@ -1208,12 +1400,12 @@ plot_grid(bgd_fpr+theme(legend.position = "bottom"),
 
 \pagebreak
 
-### Figure 3: Comparison of serological measurements among recently infected and recently vaccinated individuals. 
-Boxplots show the distributions for each antibody measurement (A). Only a subset of Bangladeshi vaccinees had measurements for anti-O139 OSP IgA and IgM. The two dimensions of the separate multidimensional scaling analyses are shown in the scatterplot for each denoted time window (B). 
+ 
 
 ```{r compare, eval=FALSE,fig.height = 8, fig.width = 8}
 
-
+# ### Figure 3: Comparison of serological measurements among recently infected and recently vaccinated individuals. 
+# Boxplots show the distributions for each antibody measurement (A). Only a subset of Bangladeshi vaccinees had measurements for anti-O139 OSP IgA and IgM. The two dimensions of the separate multidimensional scaling analyses are shown in the scatterplot for each denoted time window (B).
 
 
 compare_data <- final_df %>%
@@ -1394,10 +1586,9 @@ plot_grid(boxplot,
 \pagebreak
 
 
-### Figure 4 : Three class model
 
 ```{r}
-
+### Figure 4 : Three class model
 ### markers
 three_var <- data.frame(marker=colnames(final_wide)) %>%
                 filter(str_detect(marker,"CtxB|Ogawa|Inaba")) %>%
@@ -1743,10 +1934,9 @@ test_data %>% filter(cohort=="HTI Vaccinee") %>%
 
 
 
-## Two class model
 
 ```{r}
-
+## Two class model
 bangladeshi_twofitdata <- final_wide_nomissing %>%
                 filter(cohort %in% c("SMIC/PIC","BGD Vaccinee")) %>%
                 mutate(vaxinf_class =case_when(
@@ -2017,7 +2207,6 @@ plot_grid(roc_curve,importance_plot,confusion_plot,labels=c("A","B","C"))
 \pagebreak
 
 
-### Figure 5
 
 
 

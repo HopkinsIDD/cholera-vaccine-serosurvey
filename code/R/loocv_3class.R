@@ -120,66 +120,66 @@ for(v in 1:length(var_list)){
 write_rds(raw_df, "data/generated_data/loocv_3class_df.rds")
 
 
-raw_df <- read_rds("data/generated_data/loocv_3class_df.rds")
-
-
-raw_df %>%
-        mutate(three_class=factor(three_class),
-               prediction=factor(prediction)
-               ) %>%
-        count(variables,three_class,prediction,.drop=FALSE) %>%
-                group_by(variables,three_class) %>%
-                mutate(proportion=n/sum(n)) %>%
-        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
-        mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
-        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
-        ggplot(aes(x=three_class,y=prediction))+
-                geom_tile(aes(fill=100*proportion))+
-                facet_wrap(.~variables)+
-                geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
-        scale_fill_distiller("Percent\nClassified",palette = "Oranges",
-                             direction = 1
-                             )+
-        xlab("Observed Class")+
-        ylab("Predicted Class")+
-        theme_cowplot()
-        # theme(axis.text.x = element_text(angle=45,hjust=1))
-                
-raw_df %>%
-        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
-        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
-        mutate(prediction=factor(prediction)) %>%
-        group_by(variables,three_class,prediction,.drop=FALSE) %>%
-        summarize(n=n()) %>%
-        group_by(variables,three_class)%>%
-        mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%) ")) %>%
-        spread(prediction,n) %>%
-        rename(`Observed Class`=three_class,
-               Model=variables
-               ) %>%
-        flextable::flextable() %>%
-        flextable::autofit()
-
-
-raw_df %>% distinct(three_class,id) %>%
-        count(three_class)
-
-raw_df %>%
-        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
-        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
-        mutate(prediction=factor(prediction)) %>%
-        group_by(variables,three_class,cohort,status) %>%
-        mutate(Days=paste0(sort(unique(day)),collapse = ", ")) %>%
-        group_by(variables,three_class,cohort,status,Days,prediction,.drop=FALSE) %>%
-        summarize(n=n(),
-                  ) %>%
-        group_by(variables,three_class,cohort,status,Days)%>%
-        mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%)")) %>%
-        spread(prediction,n) %>%
-        rename(`Observed Class`=three_class,
-               Model=variables) %>%
-        flextable::flextable() %>%
-        flextable::autofit()
+# raw_df <- read_rds("data/generated_data/loocv_3class_df.rds")
+# 
+# 
+# raw_df %>%
+#         mutate(three_class=factor(three_class),
+#                prediction=factor(prediction)
+#                ) %>%
+#         count(variables,three_class,prediction,.drop=FALSE) %>%
+#                 group_by(variables,three_class) %>%
+#                 mutate(proportion=n/sum(n)) %>%
+#         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+#         mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
+#         mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+#         ggplot(aes(x=three_class,y=prediction))+
+#                 geom_tile(aes(fill=100*proportion))+
+#                 facet_wrap(.~variables)+
+#                 geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
+#         scale_fill_distiller("Percent\nClassified",palette = "Oranges",
+#                              direction = 1
+#                              )+
+#         xlab("Observed Class")+
+#         ylab("Predicted Class")+
+#         theme_cowplot()
+#         # theme(axis.text.x = element_text(angle=45,hjust=1))
+#                 
+# raw_df %>%
+#         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+#         mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+#         mutate(prediction=factor(prediction)) %>%
+#         group_by(variables,three_class,prediction,.drop=FALSE) %>%
+#         summarize(n=n()) %>%
+#         group_by(variables,three_class)%>%
+#         mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%) ")) %>%
+#         spread(prediction,n) %>%
+#         rename(`Observed Class`=three_class,
+#                Model=variables
+#                ) %>%
+#         flextable::flextable() %>%
+#         flextable::autofit()
+# 
+# 
+# raw_df %>% distinct(three_class,id) %>%
+#         count(three_class)
+# 
+# raw_df %>%
+#         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+#         mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+#         mutate(prediction=factor(prediction)) %>%
+#         group_by(variables,three_class,cohort,status) %>%
+#         mutate(Days=paste0(sort(unique(day)),collapse = ", ")) %>%
+#         group_by(variables,three_class,cohort,status,Days,prediction,.drop=FALSE) %>%
+#         summarize(n=n(),
+#                   ) %>%
+#         group_by(variables,three_class,cohort,status,Days)%>%
+#         mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%)")) %>%
+#         spread(prediction,n) %>%
+#         rename(`Observed Class`=three_class,
+#                Model=variables) %>%
+#         flextable::flextable() %>%
+#         flextable::autofit()
 
 
 # for(v in 1:length(var_list)){

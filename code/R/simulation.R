@@ -1,3 +1,4 @@
+rm(list=ls())
 
 library(tidyverse)
 library(tidybayes)
@@ -345,11 +346,12 @@ lambda_df <- data.frame()
 simulations <- 100
 n_survey <- 1000
 coverage_values <- c(0, 0.25, 0.5, 0.75)
-true_seroinc <- 0.1
 campaign_timepoints <- c(21,120)
 
 stan_model_compiled <- stan_model("code/stan/vax-model-simplified.stan")
 
+
+for(true_seroinc in c(0.05,0.1,0.2)){ #choose several values of true seroincidence to look at
 for(cov in coverage_values){
         
         
@@ -546,145 +548,136 @@ for(cov in coverage_values){
                                ".rds"))
                      
              }
-}
+}}
                 
-# write_rds(simulation_df, "data/generated_data/analysis_objects/simulation/simulation_df_5.rds")
-# write_rds(lambda_df, "data/generated_data/analysis_objects/simulation/lambda_df_5.rds")
-# write_rds(sims_original, "data/generated_data/analysis_objects/simulation/sims_original_5.rds")
-
-sims_original
-
-simulation_df  %>%
-        ggplot(aes(x=factor(campaign_day),y=seropos))+
-        ggbeeswarm::geom_beeswarm(alpha=0.5)+
-        geom_hline(yintercept=0.05, lty=2, col="red")+
-        facet_grid(coverage~.)+
-        cowplot::theme_cowplot()+
-        theme(axis.text.x = element_text(angle=45,hjust = 1))+
-        ylab("200-day seropositivity")+
-        xlab("Method")
 
 
-
-lambda_df  %>%
-                ggplot(aes(x=adjustment,y=lambda))+
-                ggbeeswarm::geom_beeswarm(alpha=0.5)+
-                geom_hline(yintercept=0.05, lty=2, col="red")+
-                facet_grid(coverage~campaign_day)+
-                cowplot::theme_cowplot()+
-                theme(axis.text.x = element_text(angle=45,hjust = 1))+
-                ylab("200-day seroincidence")+
-                xlab("Method")
-
-
-
-sims_viz <- filter(simulation_df,campaign_day==21, coverage==0) %>%
-        filter(incidence==true_seroinc)%>%
-                distinct(simulation,truth) %>%
-                mutate(`Ignore 21`=truth,
-                       `Ignore 120`=truth,
-                       `Questionnaire 21`=truth,
-                       `Alternative NA`=truth,
-                       ) %>%
-                select(-truth) %>%
-                gather(new_strategy, truth,-simulation) %>%
-        mutate(new_strategy = factor(new_strategy,
-                                     levels=c("Ignore 21", "Ignore 120",
-                                              "Questionnaire 21", "Alternative NA"
-                                     ),
-                                     labels=c("Original Model\n(21 days)", "Original Model\n(120 days)",
-                                              "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
-        )
-        ) %>%
-        expand_grid(coverage=c("0% Coverage",
-                        "25% Coverage",
-                        "50% Coverage",
-                        "75% Coverage"
-        ))%>%
-        mutate(new_coverage=factor(coverage,
-                                   labels=c("0% Coverage",
-                                            "25% Coverage",
-                                            "50% Coverage",
-                                            "75% Coverage"
-                                   )
-        )) 
-                
-lambda_df  %>%
-        filter(campaign_day == 21 |
-               (adjustment == "Ignore" & campaign_day == 120)|
-               adjustment == "Alternative"
-                       )%>%
-        mutate(new_strategy=paste(adjustment,campaign_day)) %>%
-        mutate(new_strategy = factor(new_strategy,
-                levels=c("Ignore 21", "Ignore 120",
-                         "Questionnaire 21", "Alternative NA"
-                         ),
-                labels=c("Original Model\n(21 days)", "Original Model\n(120 days)",
-                         "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
-                )
-                       ) %>%
-        mutate(new_coverage=factor(coverage,
-                                   labels=c("0% Coverage",
-                                            "25% Coverage",
-                                            "50% Coverage",
-                                            "75% Coverage"
-                                            )
-                                   )) %>%
-        group_by(new_strategy,coverage)%>%
-        mutate(avg_lambda=mean(lambda)) %>%
-        ungroup()%>%
-        select(simulation,new_strategy,new_coverage,lambda,avg_lambda) %>%
-        left_join(sims_viz,by = c("simulation", "new_strategy", "new_coverage")) %>%
-        gather(type,value,-c(simulation,new_strategy, new_coverage, avg_lambda,coverage))%>%
-        ggplot(aes(x=new_strategy))+
-        geom_violin(aes(y=value,col=type,alpha=type),position="identity",fill="grey",
-                    trim=FALSE,scale="area")+
-        scale_color_manual(values=c("blue",NA),na.value = NA)+
-        scale_alpha_manual(values=c(0,0.3))+
-        geom_point(aes(y=avg_lambda),col="blue")+
-        facet_wrap(new_coverage~.)+
-        cowplot::theme_cowplot()+
-        theme(axis.text.x = element_text(angle=45,hjust = 1),
-              legend.position = "none"
-              )+
-        ylab("200-day seroincidence")+
-        xlab("Strategy")
-
-
-lambda_df  %>%
-        filter(adjustment== "Ignore", campaign_day == 21) %>%
-        mutate(new_coverage=factor(coverage,
-                                   labels=c("0% Coverage",
-                                            "25% Coverage",
-                                            "50% Coverage",
-                                            "75% Coverage"
-                                   )
-        )) %>%
-        group_by(new_coverage) %>%
-        summarize(lambda=glue::glue("{round(mean(lambda),2)} {round(min(lambda),2)}-{round(max(lambda),2)}")
-        )
-
-
-lambda_df  %>%
-        filter(campaign_day == 21 |
-                       (adjustment == "Ignore" & campaign_day == 120)|
-                       adjustment == "Alternative"
-        )%>%
-        mutate(new_strategy=paste(adjustment,campaign_day)) %>%
-        mutate(new_strategy = factor(new_strategy,
-                                     levels=c("Ignore 21", "Ignore 120",
-                                              "Questionnaire 21", "Alternative NA"
-                                     ),
-                                     labels=c("Original Model (21 days)", "Original Model (120 days)",
-                                              "Original Model + Questionnaire (21 days)", 
-                                              "Alternative Model 1 (21 days)")
-        )
-        ) %>%
-        filter(coverage==0.5) %>%
-        group_by(new_strategy) %>%
-        summarize(lambda=glue::glue("{round(mean(lambda),2)} {round(min(lambda),2)}-{round(max(lambda),2)}")
-                  )
-
+# simulation_df <- read_rds("data/generated_data/analysis_objects/simulation/simulation_df_5.rds")
+# lambda_df <- read_rds("data/generated_data/analysis_objects/simulation/lambda_df_5.rds")
+# sims_original <- read_rds("data/generated_data/analysis_objects/simulation/sims_original_5.rds")
+# 
+# 
+# 
+# lambda_df  %>%
+#                 ggplot(aes(x=adjustment,y=lambda))+
+#                 ggbeeswarm::geom_beeswarm(alpha=0.5)+
+#                 geom_hline(yintercept=0.05, lty=2, col="red")+
+#                 facet_grid(coverage~campaign_day)+
+#                 cowplot::theme_cowplot()+
+#                 theme(axis.text.x = element_text(angle=45,hjust = 1))+
+#                 ylab("200-day seroincidence")+
+#                 xlab("Method")
+# 
+# 
+# table(simulation_df$incidence)
+# 
+# sims_viz <- filter(simulation_df,campaign_day==21, coverage==0) %>%
+#         filter(incidence==0.10)%>%
+#                 distinct(simulation,truth) %>%
+#                 mutate(`Ignore 21`=truth,
+#                        `Ignore 120`=truth,
+#                        `Questionnaire 21`=truth,
+#                        `Alternative NA`=truth,
+#                        ) %>%
+#                 select(-truth) %>%
+#                 gather(new_strategy, truth,-simulation) %>%
+#         mutate(new_strategy = factor(new_strategy,
+#                                      levels=c("Ignore 21", "Ignore 120",
+#                                               "Questionnaire 21", "Alternative NA"
+#                                      ),
+#                                      labels=c("Original Model\n(21 days)", "Original Model\n(120 days)",
+#                                               "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
+#         )
+#         ) %>%
+#         expand_grid(coverage=c("0% Coverage",
+#                         "25% Coverage",
+#                         "50% Coverage",
+#                         "75% Coverage"
+#         ))%>%
+#         mutate(new_coverage=factor(coverage,
+#                                    labels=c("0% Coverage",
+#                                             "25% Coverage",
+#                                             "50% Coverage",
+#                                             "75% Coverage"
+#                                    )
+#         )) 
+#                 
+# lambda_df  %>%
+#         filter(campaign_day == 21 |
+#                (adjustment == "Ignore" & campaign_day == 120)|
+#                adjustment == "Alternative"
+#                        )%>%
+#         mutate(new_strategy=paste(adjustment,campaign_day)) %>%
+#         mutate(new_strategy = factor(new_strategy,
+#                 levels=c("Ignore 21", "Ignore 120",
+#                          "Questionnaire 21", "Alternative NA"
+#                          ),
+#                 labels=c("Original Model\n(21 days)", "Original Model\n(120 days)",
+#                          "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
+#                 )
+#                        ) %>%
+#         mutate(new_coverage=factor(coverage,
+#                                    labels=c("0% Coverage",
+#                                             "25% Coverage",
+#                                             "50% Coverage",
+#                                             "75% Coverage"
+#                                             )
+#                                    )) %>%
+#         group_by(new_strategy,coverage)%>%
+#         mutate(avg_lambda=mean(lambda)) %>%
+#         ungroup()%>%
+#         select(simulation,new_strategy,new_coverage,lambda,avg_lambda) %>%
+#         left_join(sims_viz,by = c("simulation", "new_strategy", "new_coverage")) %>%
+#         gather(type,value,-c(simulation,new_strategy, new_coverage, avg_lambda,coverage))%>%
+#         ggplot(aes(x=new_strategy))+
+#         geom_violin(aes(y=value,col=type,alpha=type),position="identity",fill="grey",
+#                     trim=FALSE,scale="area")+
+#         scale_color_manual(values=c("blue",NA),na.value = NA)+
+#         scale_alpha_manual(values=c(0,0.3))+
+#         geom_point(aes(y=avg_lambda),col="blue")+
+#         facet_wrap(new_coverage~.)+
+#         cowplot::theme_cowplot()+
+#         theme(axis.text.x = element_text(angle=45,hjust = 1),
+#               legend.position = "none"
+#               )+
+#         ylab("200-day seroincidence")+
+#         xlab("Strategy")
+# 
+# 
+# lambda_df  %>%
+#         filter(adjustment== "Ignore", campaign_day == 21) %>%
+#         mutate(new_coverage=factor(coverage,
+#                                    labels=c("0% Coverage",
+#                                             "25% Coverage",
+#                                             "50% Coverage",
+#                                             "75% Coverage"
+#                                    )
+#         )) %>%
+#         group_by(new_coverage) %>%
+#         summarize(lambda=glue::glue("{round(mean(lambda),2)} {round(min(lambda),2)}-{round(max(lambda),2)}")
+#         )
+# 
+# 
+# lambda_df  %>%
+#         filter(campaign_day == 21 |
+#                        (adjustment == "Ignore" & campaign_day == 120)|
+#                        adjustment == "Alternative"
+#         )%>%
+#         mutate(new_strategy=paste(adjustment,campaign_day)) %>%
+#         mutate(new_strategy = factor(new_strategy,
+#                                      levels=c("Ignore 21", "Ignore 120",
+#                                               "Questionnaire 21", "Alternative NA"
+#                                      ),
+#                                      labels=c("Original Model (21 days)", "Original Model (120 days)",
+#                                               "Original Model + Questionnaire (21 days)", 
+#                                               "Alternative Model 1 (21 days)")
+#         )
+#         ) %>%
+#         filter(coverage==0.5) %>%
+#         group_by(new_strategy) %>%
+#         summarize(lambda=glue::glue("{round(mean(lambda),2)} {round(min(lambda),2)}-{round(max(lambda),2)}")
+#                   )
+# 
 
 # 3. Simulate truth and seropositivity -----------
 # sims <- sim_truth(10,1000,0.5,0.05)
@@ -737,497 +730,497 @@ lambda_df  %>%
 
 
 
-#run simulations
-
-simulation_df <-data.frame()
-lambda_df <- data.frame()
-
-simulations <- 10
-coverage_values <- c(0, 0.25, 0.5, 0.75)
-
-stan_model_compiled <- stan_model("code/stan/vax-model-simplified.stan")
-
-for(cov in coverage_values[3]){
-        for(days in campaign_timepoints[2]){
-                
-                cat(cov," "  ,days, "\n")
-                
-                new_vax_obj <- new_vax_tv_obj %>%
-                        filter(days_ago==days)%>%
-                        select(-days_ago)
-                
-                tmp_vax_run <- simulate_serosurvey_vax(n_sim = simulations,
-                                                        n_survey = 1000,
-                                                        sens_df= new_sens_obj,
-                                                        spec_df= new_spec_obj,
-                                                        vax_df = new_vax_obj,
-                                                        coverage=cov,
-                                                        incidence=0.05
-                ) %>% bind_rows(.id="simulation") %>%
-                        mutate(campaign_day=days)
-                        
-                
-                simulation_df <- bind_rows(
-                        simulation_df,tmp_vax_run
-                )
-                
-                tmp_counts <- tmp_vax_run %>%
-                        mutate(campaign_day=days) %>% 
-                        ungroup()%>%
-                        count(simulation,seropos,V,coverage,incidence,campaign_day) %>%
-                        mutate(category=glue::glue("S{seropos}Q{V}")) %>%
-                        select(-seropos,-V) %>%
-                        spread(category,n)
-                
-                for(i in tmp_counts$simulation){
-                        
-                        this_count_vec <- c(0,0,0,0)
-                        
-                        this_count <- tmp_counts %>%
-                                filter(simulation==i)
-                        
-                        if("S0Q0" %in% colnames(this_count)) this_count_vec[1] <- this_count$S0Q0
-                        if("S1Q0" %in% colnames(this_count)) this_count_vec[2] <- this_count$S1Q0
-                        if("S0Q1" %in% colnames(this_count)) this_count_vec[3] <- this_count$S0Q1
-                        if("S1Q1" %in% colnames(this_count)) this_count_vec[4] <- this_count$S1Q1
-                        
-                        #no adjustment
-                        biased_data <- list(
-                                S0Q0 = this_count_vec[1] + this_count_vec[3],
-                                S1Q0 = this_count_vec[2] + this_count_vec[4],
-                                S0Q1 = 0,
-                                S1Q1 = 0,
-                                
-                                alpha_p1 = sens_beta$estimate[1],
-                                alpha_p2 = sens_beta$estimate[2],
-                                beta_p1 = spec_beta$estimate[1],
-                                beta_p2 = spec_beta$estimate[2],
-                                epsilon_p1 = vax_beta %>%
-                                        filter(days_ago==days) %>%
-                                        pull(shape1),
-                                epsilon_p2 =vax_beta %>%
-                                        filter(days_ago==days) %>%
-                                        pull(shape2)
-                        )
-                        
-                        biased_fit<- sampling(stan_model_compiled,
-                                             data = biased_data)
-                        
-                        #questionnaire adjustment
-                        questionnaire_data <- list(
-                                S0Q0 = this_count_vec[1],
-                                S1Q0 = this_count_vec[2],
-                                S0Q1 = this_count_vec[3],
-                                S1Q1 = this_count_vec[4],
-                                
-                                alpha_p1 = sens_beta$estimate[1],
-                                alpha_p2 = sens_beta$estimate[2],
-                                beta_p1 = spec_beta$estimate[1],
-                                beta_p2 = spec_beta$estimate[2],
-                                epsilon_p1 = vax_beta %>%
-                                        filter(days_ago==days) %>%
-                                        pull(shape1),
-                                epsilon_p2 =vax_beta %>%
-                                        filter(days_ago==days) %>%
-                                        pull(shape2)
-                        )
-                        
-                        questionnaire_fit <- sampling(stan_model_compiled,
-                                                      data = questionnaire_data)
-                        
-                        
-                        lambda_df <- bind_rows(
-                                
-                                lambda_df,
-                                bind_rows(
-                                spread_draws(biased_fit,lambda) %>% mean_qi() %>%
-                                        select( lambda,.lower,.upper) %>%
-                                        mutate(adjustment="Adjusted"),
-                                spread_draws(questionnaire_fit,lambda) %>% mean_qi() %>%
-                                        select( lambda,.lower,.upper) %>%
-                                        mutate(adjustment="Questionnaire")
-                                ) %>%
-                                        mutate(coverage = cov,
-                                               campaign_day=days
-                                               )
-                        )
-                        
-                }
-                
-}}
-
-simulation_df %>% 
-                group_by(simulation,coverage,campaign_day) %>%
-                summarize(Seropositivity=mean(seropos),
-                          Incidence = mean(R)
-                          ) %>%
-        gather(adjustment,lambda,-simulation,-coverage,-campaign_day) %>%
-        bind_rows(lambda_df %>% select(-.lower,-.upper))%>%
-        mutate(adjustment = ifelse(adjustment=="Unadjusted",
-                                   "Adjusted",adjustment
-                                   ))%>%
-        mutate(adjustment=factor(adjustment,levels=c("Incidence","Seropositivity","Adjusted","Questionnaire")))%>%
-        filter(campaign_day<180)%>%
-        mutate(campaign_day=paste(campaign_day,"days")) %>%
-        mutate(campaign_day=factor(campaign_day, 
-                                   levels=c("21 days",
-                                            "45 days",
-                                            "90 days",
-                                            "120 days"
-                                            )))%>%
-        ggplot(aes(x=adjustment,y=lambda))+
-        ggbeeswarm::geom_beeswarm(alpha=0.5)+
-        # geom_boxplot()+
-        geom_hline(yintercept=0.05, lty=2, col="red")+
-        facet_grid(coverage~campaign_day)+
-        cowplot::theme_cowplot()+
-        theme(axis.text.x = element_text(angle=45,hjust = 1))+
-        ylab("200-day seroincidence")+
-        xlab("Method")
-
-
-
-#run it
-
-cat_counts<- vax21_run_25$sim1 %>% 
-        ungroup()%>%
-        count(seropos,V) %>%
-        mutate(category=glue::glue("S{seropos}Q{V}")) %>%
-        select(n,category) %>%
-        spread(category,n)
-
-stan_obj <- list(
-          S0Q0 = cat_counts$S0Q0+cat_counts$S0Q1,
-          S1Q0 = cat_counts$S1Q0+cat_counts$S1Q1,
-          S0Q1 = 0,
-          S1Q1 = 0,
-        
-         alpha_p1 = sens_beta$estimate[1],
-         alpha_p2 = sens_beta$estimate[2],
-         beta_p1 = spec_beta$estimate[1],
-         beta_p2 = spec_beta$estimate[2],
-         epsilon_p1 = vax_beta %>%
-                 filter(days_ago==21) %>%
-                 pull(shape1),
-         epsilon_p2 =vax_beta %>%
-                 filter(days_ago==21) %>%
-                 pull(shape2)
-)
-
-library(rstan)
-
-second_model <- stan_model("code/stan/vax-model-simplified.stan")
-fit <- fit_second_model <- sampling(second_model, data = stan_obj)
-
-shinystan::launch_shinystan(fit)
-
-
-
-
-
-
-
-
-
-
-#### OLD
-
-# #get time varying sensitivity
-# sens_obj <- data.frame(
-#         pos_ID = paste0("Z",rep(1:50,200)),
-#         diff=rep(rnorm(50,sd=1),200)
-# ) %>% arrange(pos_ID) %>%
-#         mutate(days_ago=rep(1:200,50),
-#                avg_sens = rep(seq(log(0.75/(1-0.75)),log(0.25/(1-0.25)),length.out=200),50)
-#         ) %>%
-#         # mutate(ind_sens = log(avg_sens/(1-avg_sens))) %>%
-#         mutate(ind_sens = avg_sens+diff) %>%
-#         mutate(ind_sens= 1/(1+exp(-ind_sens))) %>%
-#         mutate(avg_sens= 1/(1+exp(-avg_sens)))
+# #run simulations
 # 
-# sens_estim <- sens_obj %>%
-#         group_by(days_ago)%>%
-#         summarize(sens=mean(ind_sens))%>%
-#         pull(sens) %>%
-#         mean()
+# simulation_df <-data.frame()
+# lambda_df <- data.frame()
 # 
-# #get specificity (not vaxxed)
-# spec_obj <- data.frame(
-#         neg_ID= paste0("Y",1:50),
-#         avg_spec = 0.95,
-#         diff=rnorm(50,sd=1)
-# )  %>%
-#         mutate(ind_spec = log(avg_spec/(1-avg_spec))) %>%
-#         mutate(ind_spec = ind_spec+diff) %>%
-#         mutate(ind_spec= 1/(1+exp(-ind_spec)))
-# spec_estim <- mean(spec_obj$ind_spec)
+# simulations <- 10
+# coverage_values <- c(0, 0.25, 0.5, 0.75)
 # 
+# stan_model_compiled <- stan_model("code/stan/vax-model-simplified.stan")
 # 
-# #get specificity (vaxxed)
-# vax_obj <- data.frame(
-#         vax_ID= paste0("X",1:50),
-#         avg_spec = 0.75,
-#         diff=rnorm(50,sd=1)
-# )  %>%
-#         mutate(ind_spec = log(avg_spec/(1-avg_spec))) %>%
-#         mutate(ind_spec = ind_spec+diff) %>%
-#         mutate(ind_spec= 1/(1+exp(-ind_spec)))
+# for(cov in coverage_values[3]){
+#         for(days in campaign_timepoints[2]){
+#                 
+#                 cat(cov," "  ,days, "\n")
+#                 
+#                 new_vax_obj <- new_vax_tv_obj %>%
+#                         filter(days_ago==days)%>%
+#                         select(-days_ago)
+#                 
+#                 tmp_vax_run <- simulate_serosurvey_vax(n_sim = simulations,
+#                                                         n_survey = 1000,
+#                                                         sens_df= new_sens_obj,
+#                                                         spec_df= new_spec_obj,
+#                                                         vax_df = new_vax_obj,
+#                                                         coverage=cov,
+#                                                         incidence=0.05
+#                 ) %>% bind_rows(.id="simulation") %>%
+#                         mutate(campaign_day=days)
+#                         
+#                 
+#                 simulation_df <- bind_rows(
+#                         simulation_df,tmp_vax_run
+#                 )
+#                 
+#                 tmp_counts <- tmp_vax_run %>%
+#                         mutate(campaign_day=days) %>% 
+#                         ungroup()%>%
+#                         count(simulation,seropos,V,coverage,incidence,campaign_day) %>%
+#                         mutate(category=glue::glue("S{seropos}Q{V}")) %>%
+#                         select(-seropos,-V) %>%
+#                         spread(category,n)
+#                 
+#                 for(i in tmp_counts$simulation){
+#                         
+#                         this_count_vec <- c(0,0,0,0)
+#                         
+#                         this_count <- tmp_counts %>%
+#                                 filter(simulation==i)
+#                         
+#                         if("S0Q0" %in% colnames(this_count)) this_count_vec[1] <- this_count$S0Q0
+#                         if("S1Q0" %in% colnames(this_count)) this_count_vec[2] <- this_count$S1Q0
+#                         if("S0Q1" %in% colnames(this_count)) this_count_vec[3] <- this_count$S0Q1
+#                         if("S1Q1" %in% colnames(this_count)) this_count_vec[4] <- this_count$S1Q1
+#                         
+#                         #no adjustment
+#                         biased_data <- list(
+#                                 S0Q0 = this_count_vec[1] + this_count_vec[3],
+#                                 S1Q0 = this_count_vec[2] + this_count_vec[4],
+#                                 S0Q1 = 0,
+#                                 S1Q1 = 0,
+#                                 
+#                                 alpha_p1 = sens_beta$estimate[1],
+#                                 alpha_p2 = sens_beta$estimate[2],
+#                                 beta_p1 = spec_beta$estimate[1],
+#                                 beta_p2 = spec_beta$estimate[2],
+#                                 epsilon_p1 = vax_beta %>%
+#                                         filter(days_ago==days) %>%
+#                                         pull(shape1),
+#                                 epsilon_p2 =vax_beta %>%
+#                                         filter(days_ago==days) %>%
+#                                         pull(shape2)
+#                         )
+#                         
+#                         biased_fit<- sampling(stan_model_compiled,
+#                                              data = biased_data)
+#                         
+#                         #questionnaire adjustment
+#                         questionnaire_data <- list(
+#                                 S0Q0 = this_count_vec[1],
+#                                 S1Q0 = this_count_vec[2],
+#                                 S0Q1 = this_count_vec[3],
+#                                 S1Q1 = this_count_vec[4],
+#                                 
+#                                 alpha_p1 = sens_beta$estimate[1],
+#                                 alpha_p2 = sens_beta$estimate[2],
+#                                 beta_p1 = spec_beta$estimate[1],
+#                                 beta_p2 = spec_beta$estimate[2],
+#                                 epsilon_p1 = vax_beta %>%
+#                                         filter(days_ago==days) %>%
+#                                         pull(shape1),
+#                                 epsilon_p2 =vax_beta %>%
+#                                         filter(days_ago==days) %>%
+#                                         pull(shape2)
+#                         )
+#                         
+#                         questionnaire_fit <- sampling(stan_model_compiled,
+#                                                       data = questionnaire_data)
+#                         
+#                         
+#                         lambda_df <- bind_rows(
+#                                 
+#                                 lambda_df,
+#                                 bind_rows(
+#                                 spread_draws(biased_fit,lambda) %>% mean_qi() %>%
+#                                         select( lambda,.lower,.upper) %>%
+#                                         mutate(adjustment="Adjusted"),
+#                                 spread_draws(questionnaire_fit,lambda) %>% mean_qi() %>%
+#                                         select( lambda,.lower,.upper) %>%
+#                                         mutate(adjustment="Questionnaire")
+#                                 ) %>%
+#                                         mutate(coverage = cov,
+#                                                campaign_day=days
+#                                                )
+#                         )
+#                         
+#                 }
+#                 
+# }}
+# 
+# simulation_df %>% 
+#                 group_by(simulation,coverage,campaign_day) %>%
+#                 summarize(Seropositivity=mean(seropos),
+#                           Incidence = mean(R)
+#                           ) %>%
+#         gather(adjustment,lambda,-simulation,-coverage,-campaign_day) %>%
+#         bind_rows(lambda_df %>% select(-.lower,-.upper))%>%
+#         mutate(adjustment = ifelse(adjustment=="Unadjusted",
+#                                    "Adjusted",adjustment
+#                                    ))%>%
+#         mutate(adjustment=factor(adjustment,levels=c("Incidence","Seropositivity","Adjusted","Questionnaire")))%>%
+#         filter(campaign_day<180)%>%
+#         mutate(campaign_day=paste(campaign_day,"days")) %>%
+#         mutate(campaign_day=factor(campaign_day, 
+#                                    levels=c("21 days",
+#                                             "45 days",
+#                                             "90 days",
+#                                             "120 days"
+#                                             )))%>%
+#         ggplot(aes(x=adjustment,y=lambda))+
+#         ggbeeswarm::geom_beeswarm(alpha=0.5)+
+#         # geom_boxplot()+
+#         geom_hline(yintercept=0.05, lty=2, col="red")+
+#         facet_grid(coverage~campaign_day)+
+#         cowplot::theme_cowplot()+
+#         theme(axis.text.x = element_text(angle=45,hjust = 1))+
+#         ylab("200-day seroincidence")+
+#         xlab("Method")
 # 
 # 
 # 
-# run_1 <- simulate_serosurvey_novax(n_sim = 10,
-#                                    n_survey = 1000,
-#                                    sens_df=sens_obj,spec_df=spec_obj,
-#                                    incidence=0.01)
+# #run it
 # 
-# run_5 <- simulate_serosurvey_novax(n_sim = 10,
-#                                    n_survey = 1000,
-#                                    sens_df=sens_obj,spec_df=spec_obj,
-#                                    incidence=0.05)
+# cat_counts<- vax21_run_25$sim1 %>% 
+#         ungroup()%>%
+#         count(seropos,V) %>%
+#         mutate(category=glue::glue("S{seropos}Q{V}")) %>%
+#         select(n,category) %>%
+#         spread(category,n)
 # 
-# run_10 <- simulate_serosurvey_novax(n_sim = 10,
-#                                     n_survey = 1000,
-#                                     sens_df=sens_obj,spec_df=spec_obj,
-#                                     incidence=0.10)
-# run_20 <- simulate_serosurvey_novax(n_sim = 10,
-#                                     n_survey = 1000,
-#                                     sens_df=sens_obj,spec_df=spec_obj,
-#                                     incidence=0.20)
-# 
-# 
-# bind_rows(
-#         bind_rows(run_1,.id="simulation"),
-#         bind_rows(run_5,.id="simulation"),
-#         bind_rows(run_10,.id="simulation"),
-#         bind_rows(run_20,.id="simulation")
-# ) %>%
-#         group_by(simulation,incidence) %>%
-#         summarize(
-#                 crude_seropos=mean(seropos),
-#                 true_inc=mean(R)
-#         ) %>%
-#         mutate(adjusted_seropos=(crude_seropos + spec_estim-1)/(sens_estim + spec_estim - 1)) %>%
-#         mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
-#         gather(type,percent,-c(simulation,incidence)) %>%
-#         ggplot(aes(y=percent,x=type,col=type))+
-#         ggbeeswarm::geom_beeswarm()+
-#         geom_hline(aes(yintercept=incidence),lty=2)+
-#         facet_wrap(.~incidence,nrow=1)
-# 
-# 
-# run_1 <- simulate_serosurvey_novax(n_sim = 10,
-#                                    n_survey = 1000,
-#                                    sens_df=sens_obj,spec_df=spec_obj,
-#                                    incidence=0.01)
-# 
-# run_5 <- simulate_serosurvey_novax(n_sim = 10,
-#                                    n_survey = 1000,
-#                                    sens_df=sens_obj,spec_df=spec_obj,
-#                                    incidence=0.05)
-# 
-# run_10 <- simulate_serosurvey_novax(n_sim = 10,
-#                                     n_survey = 1000,
-#                                     sens_df=sens_obj,spec_df=spec_obj,
-#                                     incidence=0.10)
-# run_20 <- simulate_serosurvey_novax(n_sim = 10,
-#                                     n_survey = 1000,
-#                                     sens_df=sens_obj,spec_df=spec_obj,
-#                                     incidence=0.20)
-# 
-# 
-# bind_rows(
-#         bind_rows(run_1,.id="simulation"),
-#         bind_rows(run_5,.id="simulation"),
-#         bind_rows(run_10,.id="simulation"),
-#         bind_rows(run_20,.id="simulation")
-# ) %>%
-#         group_by(simulation,incidence) %>%
-#         summarize(
-#                 crude_seropos=mean(seropos),
-#                 true_inc=mean(R)
-#         ) %>%
-#         mutate(adjusted_seropos=(crude_seropos + spec_estim-1)/(sens_estim + spec_estim - 1)) %>%
-#         mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
-#         gather(type,percent,-c(simulation,incidence)) %>%
-#         ggplot(aes(y=percent,x=type,col=type))+
-#         ggbeeswarm::geom_beeswarm()+
-#         geom_hline(aes(yintercept=incidence),lty=2)+
-#         facet_wrap(.~incidence,nrow=1)
-# 
-# 
-# #vax simulations
-# 
-# vax_run_25 <- simulate_serosurvey_vax(n_sim = 10,
-#                                       n_survey = 1000,
-#                                       sens_df=sens_obj,
-#                                       spec_df=spec_obj,
-#                                       vax_df = vax_obj,
-#                                       coverage=0.25,
-#                                       incidence=0.05
+# stan_obj <- list(
+#           S0Q0 = cat_counts$S0Q0+cat_counts$S0Q1,
+#           S1Q0 = cat_counts$S1Q0+cat_counts$S1Q1,
+#           S0Q1 = 0,
+#           S1Q1 = 0,
+#         
+#          alpha_p1 = sens_beta$estimate[1],
+#          alpha_p2 = sens_beta$estimate[2],
+#          beta_p1 = spec_beta$estimate[1],
+#          beta_p2 = spec_beta$estimate[2],
+#          epsilon_p1 = vax_beta %>%
+#                  filter(days_ago==21) %>%
+#                  pull(shape1),
+#          epsilon_p2 =vax_beta %>%
+#                  filter(days_ago==21) %>%
+#                  pull(shape2)
 # )
 # 
-# vax_run_50 <- simulate_serosurvey_vax(n_sim = 10,
-#                                       n_survey = 1000,
-#                                       sens_df=sens_obj,
-#                                       spec_df=spec_obj,
-#                                       vax_df = vax_obj,
-#                                       coverage=0.5,
-#                                       incidence=0.05
-# )
+# library(rstan)
 # 
-# vax_run_75 <- simulate_serosurvey_vax(n_sim = 10,
-#                                       n_survey = 1000,
-#                                       sens_df=sens_obj,
-#                                       spec_df=spec_obj,
-#                                       vax_df = vax_obj,
-#                                       coverage=0.75,
-#                                       incidence=0.05
-# )
+# second_model <- stan_model("code/stan/vax-model-simplified.stan")
+# fit <- fit_second_model <- sampling(second_model, data = stan_obj)
+# 
+# shinystan::launch_shinystan(fit)
 # 
 # 
 # 
-# bind_rows(
-#         bind_rows(vax_run_25,.id="simulation"),
-#         bind_rows(vax_run_50,.id="simulation"),
-#         bind_rows(vax_run_75,.id="simulation")
-# )%>%
-#         group_by(simulation,incidence,coverage) %>%
-#         summarize(
-#                 crude_seropos=mean(seropos),
-#                 true_inc=mean(R)
-#         ) %>%
-#         mutate(adjusted_seropos=(crude_seropos + spec_estim-1)/(sens_estim + spec_estim - 1)) %>%
-#         mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
-#         gather(type,percent,-c(simulation,incidence,coverage)) %>%
-#         ggplot(aes(y=percent,x=type,col=type))+
-#         ggbeeswarm::geom_beeswarm()+
-#         geom_hline(aes(yintercept=incidence),lty=2)+
-#         facet_wrap(.~coverage,nrow=1)
-
-
-# new_vax_tv_obj %>%
-#         ggplot(aes(x=days_ago,y=ind_spec,group=vax_ID))+
-#         geom_line()+
-#         ylab("Specificity")+
-#         xlab("Days since vaccination")
-
-# new_vax_21 <- new_vax_tv_obj %>%
-#         filter(days_ago==21)%>%
-#         select(-days_ago)
-# 
-# new_vax_45 <- new_vax_tv_obj %>%
-#         filter(days_ago==45)%>%
-#         select(-days_ago)
-# 
-# new_vax_90 <- new_vax_tv_obj %>%
-#         filter(days_ago==90)%>%
-#         select(-days_ago)
-# 
-# new_vax_120 <- new_vax_tv_obj %>%
-#         filter(days_ago==120)%>%
-#         select(-days_ago)
-# 
-# new_vax_180 <- new_vax_tv_obj %>%
-#         filter(days_ago==180)%>%
-#         select(-days_ago)
-
-# vax21_run_25 <- simulate_serosurvey_vax(n_sim = 100,
-#                                         n_survey = 1000,
-#                                         sens_df=new_sens_obj,
-#                                         spec_df=new_spec_obj,
-#                                         vax_df = new_vax_21,
-#                                         coverage=0.25,
-#                                         incidence=0.05
-# ) 
-# 
-# vax21_run_50 <- simulate_serosurvey_vax(n_sim = 10,
-#                                         n_survey = 1000,
-#                                         sens_df=new_sens_obj,
-#                                         spec_df=new_spec_obj,
-#                                         vax_df = new_vax_21,
-#                                         coverage=0.5,
-#                                         incidence=0.05
-# )
-# 
-# vax21_run_75 <- simulate_serosurvey_vax(n_sim = 10,
-#                                         n_survey = 1000,
-#                                         sens_df=new_sens_obj,
-#                                         spec_df=new_spec_obj,
-#                                         vax_df = new_vax_21,
-#                                         coverage=0.75,
-#                                         incidence=0.05
-# )
-# 
-# vax120_run_25 <- simulate_serosurvey_vax(n_sim = 100,
-#                                          n_survey = 1000,
-#                                          sens_df=new_sens_obj,
-#                                          spec_df=new_spec_obj,
-#                                          vax_df = new_vax_120,
-#                                          coverage=0.25,
-#                                          incidence=0.05
-# ) 
-# 
-# vax120_run_50 <- simulate_serosurvey_vax(n_sim = 100,
-#                                          n_survey = 1000,
-#                                          sens_df=new_sens_obj,
-#                                          spec_df=new_spec_obj,
-#                                          vax_df = new_vax_120,
-#                                          coverage=0.5,
-#                                          incidence=0.05
-# )
-# 
-# vax120_run_75 <- simulate_serosurvey_vax(n_sim = 100,
-#                                          n_survey = 1000,
-#                                          sens_df=new_sens_obj,
-#                                          spec_df=new_spec_obj,
-#                                          vax_df = new_vax_120,
-#                                          coverage=0.75,
-#                                          incidence=0.05
-# )
 # 
 # 
-# bind_rows(
-#         bind_rows(vax21_run_25,.id="simulation") %>% mutate(campaign_day="21 days prior"),
-#         bind_rows(vax21_run_50,.id="simulation")%>% mutate(campaign_day="21 days prior"),
-#         bind_rows(vax21_run_75,.id="simulation")%>% mutate(campaign_day="21 days prior"),
-#         bind_rows(vax120_run_25,.id="simulation")%>% mutate(campaign_day="120 days prior"),
-#         bind_rows(vax120_run_50,.id="simulation")%>% mutate(campaign_day="120 days prior"),
-#         bind_rows(vax120_run_75,.id="simulation")%>% mutate(campaign_day="120 days prior")
-# )%>%
-#         group_by(simulation,incidence,coverage,campaign_day) %>%
-#         summarize(
-#                 crude_seropos=mean(seropos),
-#                 true_inc=mean(R)
-#         ) %>%
-#         mutate(adjusted_seropos=(crude_seropos + new_spec_estim-1)/(new_sens_estim + new_spec_estim - 1)) %>%
-#         mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
-#         mutate(adjusted_seropos=ifelse(adjusted_seropos>1,1,adjusted_seropos)) %>%
-#         gather(type,percent,-c(simulation,incidence,coverage,campaign_day)) %>%
-#         ggplot(aes(y=percent,x=type,col=type))+
-#         ggbeeswarm::geom_beeswarm()+
-#         geom_hline(aes(yintercept=incidence),lty=2)+
-#         facet_grid(campaign_day~coverage)+
-#         theme(axis.text.x = element_text(angle=45,hjust=1))+
-#         ylab("Seroprevalence")
-
-
-# new_spec_obj %>%
-#         ggplot(aes(x=ind_spec))+
-#         geom_histogram()+
-#         xlab("specificity")
-# 
-# new_spec_estim <- mean(new_spec_obj$ind_spec)
 # 
 # 
-# new_spec_obj$ind_spec %>% hist()
-# new_sens_obj %>%
-#         ggplot(aes(x=days_ago,y=ind_sens,group=pos_ID))+
-#                 geom_line() +
-#         xlab("Days since infection")+
-#         ylab("sensitivity")
 # 
-# new_sens_estim <- new_sens_obj %>%
-#         group_by(days_ago)%>%
-#         summarize(sens=mean(ind_sens))%>%
-#         pull(sens) %>%
-#         mean()
+# 
+# 
+# #### OLD
+# 
+# # #get time varying sensitivity
+# # sens_obj <- data.frame(
+# #         pos_ID = paste0("Z",rep(1:50,200)),
+# #         diff=rep(rnorm(50,sd=1),200)
+# # ) %>% arrange(pos_ID) %>%
+# #         mutate(days_ago=rep(1:200,50),
+# #                avg_sens = rep(seq(log(0.75/(1-0.75)),log(0.25/(1-0.25)),length.out=200),50)
+# #         ) %>%
+# #         # mutate(ind_sens = log(avg_sens/(1-avg_sens))) %>%
+# #         mutate(ind_sens = avg_sens+diff) %>%
+# #         mutate(ind_sens= 1/(1+exp(-ind_sens))) %>%
+# #         mutate(avg_sens= 1/(1+exp(-avg_sens)))
+# # 
+# # sens_estim <- sens_obj %>%
+# #         group_by(days_ago)%>%
+# #         summarize(sens=mean(ind_sens))%>%
+# #         pull(sens) %>%
+# #         mean()
+# # 
+# # #get specificity (not vaxxed)
+# # spec_obj <- data.frame(
+# #         neg_ID= paste0("Y",1:50),
+# #         avg_spec = 0.95,
+# #         diff=rnorm(50,sd=1)
+# # )  %>%
+# #         mutate(ind_spec = log(avg_spec/(1-avg_spec))) %>%
+# #         mutate(ind_spec = ind_spec+diff) %>%
+# #         mutate(ind_spec= 1/(1+exp(-ind_spec)))
+# # spec_estim <- mean(spec_obj$ind_spec)
+# # 
+# # 
+# # #get specificity (vaxxed)
+# # vax_obj <- data.frame(
+# #         vax_ID= paste0("X",1:50),
+# #         avg_spec = 0.75,
+# #         diff=rnorm(50,sd=1)
+# # )  %>%
+# #         mutate(ind_spec = log(avg_spec/(1-avg_spec))) %>%
+# #         mutate(ind_spec = ind_spec+diff) %>%
+# #         mutate(ind_spec= 1/(1+exp(-ind_spec)))
+# # 
+# # 
+# # 
+# # run_1 <- simulate_serosurvey_novax(n_sim = 10,
+# #                                    n_survey = 1000,
+# #                                    sens_df=sens_obj,spec_df=spec_obj,
+# #                                    incidence=0.01)
+# # 
+# # run_5 <- simulate_serosurvey_novax(n_sim = 10,
+# #                                    n_survey = 1000,
+# #                                    sens_df=sens_obj,spec_df=spec_obj,
+# #                                    incidence=0.05)
+# # 
+# # run_10 <- simulate_serosurvey_novax(n_sim = 10,
+# #                                     n_survey = 1000,
+# #                                     sens_df=sens_obj,spec_df=spec_obj,
+# #                                     incidence=0.10)
+# # run_20 <- simulate_serosurvey_novax(n_sim = 10,
+# #                                     n_survey = 1000,
+# #                                     sens_df=sens_obj,spec_df=spec_obj,
+# #                                     incidence=0.20)
+# # 
+# # 
+# # bind_rows(
+# #         bind_rows(run_1,.id="simulation"),
+# #         bind_rows(run_5,.id="simulation"),
+# #         bind_rows(run_10,.id="simulation"),
+# #         bind_rows(run_20,.id="simulation")
+# # ) %>%
+# #         group_by(simulation,incidence) %>%
+# #         summarize(
+# #                 crude_seropos=mean(seropos),
+# #                 true_inc=mean(R)
+# #         ) %>%
+# #         mutate(adjusted_seropos=(crude_seropos + spec_estim-1)/(sens_estim + spec_estim - 1)) %>%
+# #         mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
+# #         gather(type,percent,-c(simulation,incidence)) %>%
+# #         ggplot(aes(y=percent,x=type,col=type))+
+# #         ggbeeswarm::geom_beeswarm()+
+# #         geom_hline(aes(yintercept=incidence),lty=2)+
+# #         facet_wrap(.~incidence,nrow=1)
+# # 
+# # 
+# # run_1 <- simulate_serosurvey_novax(n_sim = 10,
+# #                                    n_survey = 1000,
+# #                                    sens_df=sens_obj,spec_df=spec_obj,
+# #                                    incidence=0.01)
+# # 
+# # run_5 <- simulate_serosurvey_novax(n_sim = 10,
+# #                                    n_survey = 1000,
+# #                                    sens_df=sens_obj,spec_df=spec_obj,
+# #                                    incidence=0.05)
+# # 
+# # run_10 <- simulate_serosurvey_novax(n_sim = 10,
+# #                                     n_survey = 1000,
+# #                                     sens_df=sens_obj,spec_df=spec_obj,
+# #                                     incidence=0.10)
+# # run_20 <- simulate_serosurvey_novax(n_sim = 10,
+# #                                     n_survey = 1000,
+# #                                     sens_df=sens_obj,spec_df=spec_obj,
+# #                                     incidence=0.20)
+# # 
+# # 
+# # bind_rows(
+# #         bind_rows(run_1,.id="simulation"),
+# #         bind_rows(run_5,.id="simulation"),
+# #         bind_rows(run_10,.id="simulation"),
+# #         bind_rows(run_20,.id="simulation")
+# # ) %>%
+# #         group_by(simulation,incidence) %>%
+# #         summarize(
+# #                 crude_seropos=mean(seropos),
+# #                 true_inc=mean(R)
+# #         ) %>%
+# #         mutate(adjusted_seropos=(crude_seropos + spec_estim-1)/(sens_estim + spec_estim - 1)) %>%
+# #         mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
+# #         gather(type,percent,-c(simulation,incidence)) %>%
+# #         ggplot(aes(y=percent,x=type,col=type))+
+# #         ggbeeswarm::geom_beeswarm()+
+# #         geom_hline(aes(yintercept=incidence),lty=2)+
+# #         facet_wrap(.~incidence,nrow=1)
+# # 
+# # 
+# # #vax simulations
+# # 
+# # vax_run_25 <- simulate_serosurvey_vax(n_sim = 10,
+# #                                       n_survey = 1000,
+# #                                       sens_df=sens_obj,
+# #                                       spec_df=spec_obj,
+# #                                       vax_df = vax_obj,
+# #                                       coverage=0.25,
+# #                                       incidence=0.05
+# # )
+# # 
+# # vax_run_50 <- simulate_serosurvey_vax(n_sim = 10,
+# #                                       n_survey = 1000,
+# #                                       sens_df=sens_obj,
+# #                                       spec_df=spec_obj,
+# #                                       vax_df = vax_obj,
+# #                                       coverage=0.5,
+# #                                       incidence=0.05
+# # )
+# # 
+# # vax_run_75 <- simulate_serosurvey_vax(n_sim = 10,
+# #                                       n_survey = 1000,
+# #                                       sens_df=sens_obj,
+# #                                       spec_df=spec_obj,
+# #                                       vax_df = vax_obj,
+# #                                       coverage=0.75,
+# #                                       incidence=0.05
+# # )
+# # 
+# # 
+# # 
+# # bind_rows(
+# #         bind_rows(vax_run_25,.id="simulation"),
+# #         bind_rows(vax_run_50,.id="simulation"),
+# #         bind_rows(vax_run_75,.id="simulation")
+# # )%>%
+# #         group_by(simulation,incidence,coverage) %>%
+# #         summarize(
+# #                 crude_seropos=mean(seropos),
+# #                 true_inc=mean(R)
+# #         ) %>%
+# #         mutate(adjusted_seropos=(crude_seropos + spec_estim-1)/(sens_estim + spec_estim - 1)) %>%
+# #         mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
+# #         gather(type,percent,-c(simulation,incidence,coverage)) %>%
+# #         ggplot(aes(y=percent,x=type,col=type))+
+# #         ggbeeswarm::geom_beeswarm()+
+# #         geom_hline(aes(yintercept=incidence),lty=2)+
+# #         facet_wrap(.~coverage,nrow=1)
+# 
+# 
+# # new_vax_tv_obj %>%
+# #         ggplot(aes(x=days_ago,y=ind_spec,group=vax_ID))+
+# #         geom_line()+
+# #         ylab("Specificity")+
+# #         xlab("Days since vaccination")
+# 
+# # new_vax_21 <- new_vax_tv_obj %>%
+# #         filter(days_ago==21)%>%
+# #         select(-days_ago)
+# # 
+# # new_vax_45 <- new_vax_tv_obj %>%
+# #         filter(days_ago==45)%>%
+# #         select(-days_ago)
+# # 
+# # new_vax_90 <- new_vax_tv_obj %>%
+# #         filter(days_ago==90)%>%
+# #         select(-days_ago)
+# # 
+# # new_vax_120 <- new_vax_tv_obj %>%
+# #         filter(days_ago==120)%>%
+# #         select(-days_ago)
+# # 
+# # new_vax_180 <- new_vax_tv_obj %>%
+# #         filter(days_ago==180)%>%
+# #         select(-days_ago)
+# 
+# # vax21_run_25 <- simulate_serosurvey_vax(n_sim = 100,
+# #                                         n_survey = 1000,
+# #                                         sens_df=new_sens_obj,
+# #                                         spec_df=new_spec_obj,
+# #                                         vax_df = new_vax_21,
+# #                                         coverage=0.25,
+# #                                         incidence=0.05
+# # ) 
+# # 
+# # vax21_run_50 <- simulate_serosurvey_vax(n_sim = 10,
+# #                                         n_survey = 1000,
+# #                                         sens_df=new_sens_obj,
+# #                                         spec_df=new_spec_obj,
+# #                                         vax_df = new_vax_21,
+# #                                         coverage=0.5,
+# #                                         incidence=0.05
+# # )
+# # 
+# # vax21_run_75 <- simulate_serosurvey_vax(n_sim = 10,
+# #                                         n_survey = 1000,
+# #                                         sens_df=new_sens_obj,
+# #                                         spec_df=new_spec_obj,
+# #                                         vax_df = new_vax_21,
+# #                                         coverage=0.75,
+# #                                         incidence=0.05
+# # )
+# # 
+# # vax120_run_25 <- simulate_serosurvey_vax(n_sim = 100,
+# #                                          n_survey = 1000,
+# #                                          sens_df=new_sens_obj,
+# #                                          spec_df=new_spec_obj,
+# #                                          vax_df = new_vax_120,
+# #                                          coverage=0.25,
+# #                                          incidence=0.05
+# # ) 
+# # 
+# # vax120_run_50 <- simulate_serosurvey_vax(n_sim = 100,
+# #                                          n_survey = 1000,
+# #                                          sens_df=new_sens_obj,
+# #                                          spec_df=new_spec_obj,
+# #                                          vax_df = new_vax_120,
+# #                                          coverage=0.5,
+# #                                          incidence=0.05
+# # )
+# # 
+# # vax120_run_75 <- simulate_serosurvey_vax(n_sim = 100,
+# #                                          n_survey = 1000,
+# #                                          sens_df=new_sens_obj,
+# #                                          spec_df=new_spec_obj,
+# #                                          vax_df = new_vax_120,
+# #                                          coverage=0.75,
+# #                                          incidence=0.05
+# # )
+# # 
+# # 
+# # bind_rows(
+# #         bind_rows(vax21_run_25,.id="simulation") %>% mutate(campaign_day="21 days prior"),
+# #         bind_rows(vax21_run_50,.id="simulation")%>% mutate(campaign_day="21 days prior"),
+# #         bind_rows(vax21_run_75,.id="simulation")%>% mutate(campaign_day="21 days prior"),
+# #         bind_rows(vax120_run_25,.id="simulation")%>% mutate(campaign_day="120 days prior"),
+# #         bind_rows(vax120_run_50,.id="simulation")%>% mutate(campaign_day="120 days prior"),
+# #         bind_rows(vax120_run_75,.id="simulation")%>% mutate(campaign_day="120 days prior")
+# # )%>%
+# #         group_by(simulation,incidence,coverage,campaign_day) %>%
+# #         summarize(
+# #                 crude_seropos=mean(seropos),
+# #                 true_inc=mean(R)
+# #         ) %>%
+# #         mutate(adjusted_seropos=(crude_seropos + new_spec_estim-1)/(new_sens_estim + new_spec_estim - 1)) %>%
+# #         mutate(adjusted_seropos=ifelse(adjusted_seropos<0,0,adjusted_seropos)) %>%
+# #         mutate(adjusted_seropos=ifelse(adjusted_seropos>1,1,adjusted_seropos)) %>%
+# #         gather(type,percent,-c(simulation,incidence,coverage,campaign_day)) %>%
+# #         ggplot(aes(y=percent,x=type,col=type))+
+# #         ggbeeswarm::geom_beeswarm()+
+# #         geom_hline(aes(yintercept=incidence),lty=2)+
+# #         facet_grid(campaign_day~coverage)+
+# #         theme(axis.text.x = element_text(angle=45,hjust=1))+
+# #         ylab("Seroprevalence")
+# 
+# 
+# # new_spec_obj %>%
+# #         ggplot(aes(x=ind_spec))+
+# #         geom_histogram()+
+# #         xlab("specificity")
+# # 
+# # new_spec_estim <- mean(new_spec_obj$ind_spec)
+# # 
+# # 
+# # new_spec_obj$ind_spec %>% hist()
+# # new_sens_obj %>%
+# #         ggplot(aes(x=days_ago,y=ind_sens,group=pos_ID))+
+# #                 geom_line() +
+# #         xlab("Days since infection")+
+# #         ylab("sensitivity")
+# # 
+# # new_sens_estim <- new_sens_obj %>%
+# #         group_by(days_ago)%>%
+# #         summarize(sens=mean(ind_sens))%>%
+# #         pull(sens) %>%
+# #         mean()
