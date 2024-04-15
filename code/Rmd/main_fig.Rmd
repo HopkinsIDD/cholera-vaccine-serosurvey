@@ -1225,6 +1225,70 @@ final_wide %>%
 
 ```
 
+### Baseline comparison
+
+```{r}
+
+#keep
+raw_baseline_plot <- final_df %>%
+        filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
+        filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")) %>%
+        mutate(`Age Group`=ifelse(age>=10,"Adults","Children")) %>%
+        mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+        mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))%>%
+        mutate(pretty_cohort=ifelse(cohort=="SMIC/PIC",
+                                    "BGD Case",cohort
+                                    ))%>%
+        ggplot(aes(y=RAU_value,col=pretty_cohort,x=`Age Group`))+
+                geom_boxplot()+
+                scale_y_continuous("Baseline log10(1/RAU)",breaks = c(0.25,1,4)) +
+                scale_color_brewer("Cohort",palette = "Set1")+
+                facet_grid(isotype~antigen_pretty)+
+                theme_bw()+
+                theme(legend.position="bottom"
+                      )
+
+
+
+bootDF <- read_rds("data/generated_data/analysis_objects/describe/bootDF.rds")
+
+
+
+
+GMT_ratio_plot <- bootDF %>%
+        group_by(isotype,antigen_pretty,`Age Group`) %>%
+        summarize(mean=mean(RAU_ratio),
+                  lb=quantile(RAU_ratio,0.025),
+                  ub=quantile(RAU_ratio,0.975)) %>%
+        mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+        ggplot(aes(x=`Age Group`, col=isotype,y=mean))+
+                geom_point(position = position_dodge(0.5))+
+                geom_linerange(aes(ymin=lb,ymax=ub),
+                               position = position_dodge(0.5))+
+        facet_wrap(.~antigen_pretty,nrow=1)+
+        geom_hline(yintercept=1,lty=2)+
+        theme_bw()+
+        scale_y_continuous("Geometric Mean\nMFI Ratio", trans="log2")+
+        xlab("Age Group")+
+        theme(
+              legend.position = "bottom",
+                      panel.grid.minor = element_blank(),
+                     panel.grid.major.x =  element_blank(),
+
+              )+
+        scale_color_brewer("Isotype",palette = "Dark2")
+
+
+plot_grid(raw_baseline_plot,
+          GMT_ratio_plot,
+          rel_heights = c(2,1),
+          ncol=1,
+          align = "v",
+          axis="lr",
+          labels=c("A","B")
+          )
+```
+
 
 ### Three class table
 

@@ -301,7 +301,7 @@ raw_baseline_plot <- final_df %>%
 
 
 
-bootDF <- read_rds("data/generated_data/analysis_objects/bootDF.rds")
+bootDF <- read_rds("data/generated_data/analysis_objects/describe/bootDF.rds")
 
 
 

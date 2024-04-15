@@ -70,5 +70,5 @@ for(i in 1:1000){
 }
 
 
-write_rds(bootDF,"data/generated_data/analysis_objects/bootDF.rds")
+write_rds(bootDF,"data/generated_data/analysis_objects/describe/bootDF.rds")
 
