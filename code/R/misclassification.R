@@ -13,7 +13,8 @@ library(tidybayes)
 
 
 var_list <- list(
-        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age")
+        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `Reduced IgG Panel (NO AGE)` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA")
 )
 
 
@@ -22,8 +23,7 @@ fpr_fit_list <- list()
 raw_df <- data.frame()
 
 for(t in c(45,120,200,300)){
-        # for(v in 1:length(var_list)){
-        v <- 1        
+        for(v in 1:length(var_list)){
         marks <- var_list[[v]]
         
         cat("Window: ",t, "Variables: ",names(var_list)[v],"\n")        
@@ -115,15 +115,12 @@ for(t in c(45,120,200,300)){
         #
         #calculate the individual's samples seropositivity
         test_data <- final_wide %>%
-                filter(str_detect(cohort,"Vaccinee"))%>%
-                addInfectionWindow(end_window=t)
-        
+                filter(cohort %in% c("BGD Vaccinee","HTI Vaccinee","ETEC Challenge"))
+
         test_missing <- rowSums(is.na(test_data[var_list[[v]]])) >0
         
         test_data <- test_data[!test_missing,]  
         
-        
-        test_data["truth"] <- test_data[outcome]
         out_preds <-predict(this_fit,
                             test_data,
                             predict.all=TRUE)
@@ -161,28 +158,30 @@ for(t in c(45,120,200,300)){
         fpr_fit_list[[as.character(t)]][[names(var_list)[v]]] <- out_tmp
         raw_df <- bind_rows(raw_df,fpr_df)
         
-        # }
+        }
 }
 
 write_rds(raw_df, "data/generated_data/analysis_objects/misclassification/misclassify_df.rds")
 
 
-#model the the estimates using
+#model the the estimates using only "reduced IgG Panel"
 options(mc.cores = 1)
-
 
 tvfpr_fit <- list()
 tvfpr_df <- data.frame()
 
 raw_df_list <- list(
         
-        `Bangladeshi <10 years` = filter(raw_df, cohort=="BGD Vaccinee") %>%
-                filter(age<10),
-        `Bangladeshi 10+ years`= filter(raw_df, cohort=="BGD Vaccinee") %>%
-                filter(age>=10),
-        `Haitian 18+ years` = filter(raw_df, cohort=="HTI Vaccinee") ,
-        
-        `All Vaccinees` = filter(raw_df, cohort %in% c("HTI Vaccinee","BGD Vaccinee"))
+        # `Bangladeshi <10 years` = filter(raw_df, cohort=="BGD Vaccinee") %>%
+        #         filter(age<10)%>% filter(variables=="Reduced IgG Panel"),
+        # `Bangladeshi 10+ years`= filter(raw_df, cohort=="BGD Vaccinee") %>%
+        #         filter(age>=10)%>% filter(variables=="Reduced IgG Panel"),
+        # `Haitian 18+ years` = filter(raw_df, cohort=="HTI Vaccinee")%>%
+        #         filter(variables=="Reduced IgG Panel") ,
+        `All Vaccinees (Reduced IgG Panel)` = filter(raw_df, cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
+                filter(variables=="Reduced IgG Panel"),
+        `All Vaccinees (Reduced IgG Panel [NO AGE])` = filter(raw_df, cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
+                filter(variables=="Reduced IgG Panel (NO AGE)")
         
 )
 
@@ -209,7 +208,7 @@ for(t in c(45,120,200,300)){
                 
                 if(!is.null(tmp_df)){
                         tmp_df<- tmp_df %>%
-                                mutate(variables="Reduced IgG Panel")%>%
+                                # mutate(variables="Reduced IgG Panel")%>%
                                 mutate(seropos_type="spec95_seropos") %>%
                                 mutate(end_window=t) %>%
                                 mutate(population=dat)
@@ -232,6 +231,9 @@ write_rds(tvfpr_fit,
 write_rds(tvfpr_df,
           paste0("data/generated_data/analysis_objects/misclassification/","tvfpr_df.rds")
 )
+
+
+
 
 
 

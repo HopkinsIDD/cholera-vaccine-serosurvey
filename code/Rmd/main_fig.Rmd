@@ -257,7 +257,8 @@ mds_obj <- read_rds("data/generated_data/analysis_objects/mds/mds_obj.rds")
 permuted_distances <- read_rds("data/generated_data/analysis_objects/mds/permuted_distances.rds")
 
 
-misclassify_df%>%
+misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
+        filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
         filter(end_window %in% c("45"))%>%
         group_by(end_window,cohort) %>%
         summarize(seropos=sum(spec95_seropos),
@@ -265,7 +266,8 @@ misclassify_df%>%
                   )%>%
         mutate(per_pos=seropos/n)
 
-misclassify_df%>%
+misclassify_df%>% filter(variables=="Reduced IgG Panel")%>%
+        filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
         filter(end_window %in% c("120"))%>%
         group_by(day,end_window,cohort) %>%
         summarize(seropos=sum(spec95_seropos),
@@ -274,13 +276,23 @@ misclassify_df%>%
         mutate(per_pos=seropos/n) %>% 
         arrange(cohort)
 
-filter(tvfpr_df,population== "All Vaccinees") %>%
+misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
+        filter(cohort %in% c("ETEC Challenge"))%>%
+        filter(end_window %in% c("200"))%>%
+        group_by(day,end_window,cohort) %>%
+        summarize(seropos=sum(spec95_seropos),
+                  n=n(),
+                  )%>%
+        mutate(per_pos=seropos/n) 
+
+
+filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)") %>%
         filter(end_window %in% c(200,300)) %>%
         group_by(end_window) %>%
         filter(median==max(median))
 
 
-filter(tvfpr_df,population== "All Vaccinees") %>%
+filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)") %>%
         filter(end_window %in% c(200,300)) %>%
         filter(time>14)%>%
         group_by(end_window) %>%
@@ -302,7 +314,8 @@ permuted_distances %>%
         group_by(time_window) %>%
         summarize(quantile(euclidean,0.999))
 
-f2a <- misclassify_df %>%
+f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
+        filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
         group_by(day,end_window,cohort) %>%
         summarize(seropos=mean(spec95_seropos))%>%
         filter(end_window %in% c("45","120","200","300"))%>%
@@ -316,12 +329,12 @@ f2a <- misclassify_df %>%
         ggplot()+
         geom_point(aes(col=Vaccinee,
                    y=seropos,x=day,shape=Vaccinee))+
-        geom_line(data=filter(tvfpr_df,population== "All Vaccinees")%>%
+        geom_line(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)")%>%
                         mutate(end_window=factor(end_window,
                                  levels=c("45","120","200","300"),
                                  labels=c("45-day","120-day","200-day","300-day"))),
                         aes(x=time,y=median))+
-        geom_ribbon(data=filter(tvfpr_df,population== "All Vaccinees")%>%
+        geom_ribbon(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)")%>%
                         mutate(end_window=factor(end_window,
                                  levels=c("45","120","200","300"),
                                  labels=c("45-day","120-day","200-day","300-day"))),
@@ -371,6 +384,25 @@ source("loocv.R")
 ```
 
 ```{r loocv-figure, eval=TRUE,fig.width=6,fig.height=10}
+
+#variable list
+var_list <- list(
+        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `All Variables`= data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist() %>% c("age") %>% unname()
+)
+
+#get permutation importance
+importance<- ranger::ranger(data=final_wide %>%
+                filter(cohort %in% c("SMIC/PIC","BGD Vaccinee","HTI Vaccinee"))%>%
+                                    addInfectionWindow(end_window=200),
+                            formula=make_formula("inf_200",var_list[["All Variables"]]),
+                            num.trees= tree_param,
+                            case.weights = NULL,
+                            replace = TRUE,
+                            importance = "permutation"
+)
 
 f3_loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds") %>%
         filter(base_data_name!="bgd_fitdata")%>%
@@ -956,6 +988,32 @@ source("code/R/loocv_3class.R")
 loocv_3class_df <- read_rds("data/generated_data/loocv_3class_df.rds")
 
 
+
+loocv_3class_df %>% filter(variables=="Reduced IgG Panel") %>%
+        group_by(three_class) %>%
+        summarize(samples=n(),
+                  individuals=length(unique(id))
+                  )
+
+loocv_3class_df %>%
+        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+        mutate(prediction=factor(prediction)) %>%
+        group_by(variables,three_class,) %>%
+        mutate(Days=paste0(sort(unique(day)),collapse = ", ")) %>%
+        group_by(variables,three_class,Days,prediction,.drop=FALSE) %>%
+        summarize(n=n(),
+                  ) %>%
+        group_by(variables,three_class,Days)%>%
+        mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%)")) %>%
+        spread(prediction,n) %>%
+        rename(`Observed Class`=three_class,
+               Model=variables) %>%
+        flextable::flextable() %>%
+        flextable::autofit()
+
+
+
 loocv_3class_df %>%
         mutate(three_class=factor(three_class),
                prediction=factor(prediction)
@@ -1114,7 +1172,58 @@ loocv_3class_df %>%
 
 ```
 
-## Supplemental Figure
+## Supplement
+
+
+### Timing table
+
+```{r eval=FALSE}
+
+final_wide %>%
+        group_by(cohort,status) %>%
+        mutate(Individuals=length(unique(id)))%>% 
+        count(cohort,status,Individuals,day) %>%
+        mutate(n_percent=glue::glue("{n} ({round(n/Individuals*100)})")) %>%
+        arrange(cohort,status)%>% 
+        mutate(
+                exposure= case_when(
+                        cohort %in% c("BGD Vaccinee","HTI Vaccinee") ~"Vaccination with Shanchol",
+                        cohort == "ETEC Challenge" ~ "Challenged with Enterotoxigenic E. coli",
+                        status=="Case" ~ "Natural infection with V. cholerae O1",
+                        status=="Contact" ~ "Household member of case-patient infected with V. cholerae O1"
+                ),
+                Population=case_when(
+                        cohort =="BGD Vaccinee" ~ "Bangladeshi volunteer",
+                        cohort =="SMIC/PIC" & status=="Case" ~ "Bangladeshi case-patient",
+                        cohort =="SMIC/PIC" & status=="Contact" ~ "Bangladeshi volunteer",
+                        cohort =="HTI Vaccinee" ~ "Haitian volunteer",
+                        cohort == "ETEC Challenge" ~ "North American volunteer"
+                )
+                
+        ) %>%
+        ungroup()%>%
+        select(
+                `Exposure Type`= exposure,
+                Population,
+                `Days since exposure`=day,
+                Individuals,
+                `Samples (%)`=n_percent
+        ) %>%
+        flextable::flextable() %>%
+        flextable::autofit() %>% flextable::save_as_docx( path = "figures/supp_table.docx")
+
+
+
+# Type of exposure: Vaccination with Shanchol, Natural infection with VC, Challenge with ETEC strain
+# Population: Bangladeshi volunteer, Haitian voluneer, Bangladeshi case-patient, North American Volunteer
+# Total number of individuals
+# Days since exposure
+# number /percent of samples
+# Paper
+
+
+
+```
 
 
 ### Three class table
