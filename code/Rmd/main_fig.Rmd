@@ -276,15 +276,6 @@ misclassify_df%>% filter(variables=="Reduced IgG Panel")%>%
         mutate(per_pos=seropos/n) %>% 
         arrange(cohort)
 
-misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
-        filter(cohort %in% c("ETEC Challenge"))%>%
-        filter(end_window %in% c("200"))%>%
-        group_by(day,end_window,cohort) %>%
-        summarize(seropos=sum(spec95_seropos),
-                  n=n(),
-                  )%>%
-        mutate(per_pos=seropos/n) 
-
 
 filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)") %>%
         filter(end_window %in% c(200,300)) %>%
@@ -298,6 +289,15 @@ filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)") %>%
         group_by(end_window) %>%
         slice_min(abs(median-0.05),n=1)
 
+
+misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
+        filter(cohort %in% c("ETEC Challenge"))%>%
+        filter(end_window %in% c("200"))%>%
+        group_by(day,end_window,cohort) %>%
+        summarize(seropos=sum(spec95_seropos),
+                  n=n(),
+                  )%>%
+        mutate(per_pos=seropos/n) 
 
 mds_obj %>%
         group_by(time_window,status) %>%
