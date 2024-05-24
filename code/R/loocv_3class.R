@@ -7,8 +7,12 @@ source("code/R/load-data.R")
 
 #variable list
 var_list <- list(
-        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA"),
         `All Variables`= data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist()  %>% unname(),
+        `Reduced IgG Panel (and age)` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `All Variables (and age)`= data.frame(marker=colnames(final_wide)) %>%
                 filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
                 unlist() %>% c("age") %>% unname()
 )
@@ -117,7 +121,7 @@ for(v in 1:length(var_list)){
 
 
 
-write_rds(raw_df, "data/generated_data/loocv_3class_df.rds")
+write_rds(raw_df, "data/generated_data/analysis_objects/loocv/loocv_3class_df.rds")
 
 
 # raw_df <- read_rds("data/generated_data/loocv_3class_df.rds")

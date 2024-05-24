@@ -7,11 +7,23 @@ source("code/R/load-data.R")
 
 #variable list
 var_list <- list(
-        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA"),
         `All Variables`= data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist()  %>% unname(),
+        `Reduced IgG Panel (and age)` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `All Variables (and age)`= data.frame(marker=colnames(final_wide)) %>%
                 filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
                 unlist() %>% c("age") %>% unname()
 )
+
+# var_list <- list(
+#         `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+#         `All Variables`= data.frame(marker=colnames(final_wide)) %>%
+#                 filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+#                 unlist() %>% c("age") %>% unname()
+# )
+
 
 
 
@@ -199,7 +211,7 @@ for(v in 1:length(var_list)){
 
 
 #model the the time varying estimates using loocv data
-loocv_df <- read_rds("data/generated_data/analysis_objects/loocv_df_SMICPIC.rds")
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv_df.rds")
 options(mc.cores = 1)
 
 
@@ -248,14 +260,14 @@ for(m in 1:nrow(models_df)){
 
 
 write_rds(loocv_tvfit_list,
-          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_list_SMICPIC.rds")
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_list.rds")
 )
 write_rds(loocv_tvfit_df,
-          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_df_SMICPIC.rds")
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_df.rds")
 )
 
 #model the specificity 
-loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds")
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df.rds")
 options(mc.cores = 1)
 
 

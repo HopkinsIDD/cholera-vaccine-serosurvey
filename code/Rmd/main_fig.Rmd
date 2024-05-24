@@ -257,7 +257,7 @@ mds_obj <- read_rds("data/generated_data/analysis_objects/mds/mds_obj.rds")
 permuted_distances <- read_rds("data/generated_data/analysis_objects/mds/permuted_distances.rds")
 
 
-misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
+misclassify_df %>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
         filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
         filter(end_window %in% c("45"))%>%
         group_by(end_window,cohort) %>%
@@ -266,7 +266,7 @@ misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
                   )%>%
         mutate(per_pos=seropos/n)
 
-misclassify_df%>% filter(variables=="Reduced IgG Panel")%>%
+misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
         filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
         filter(end_window %in% c("120"))%>%
         group_by(day,end_window,cohort) %>%
@@ -277,13 +277,13 @@ misclassify_df%>% filter(variables=="Reduced IgG Panel")%>%
         arrange(cohort)
 
 
-filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)") %>%
+filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
         filter(end_window %in% c(200,300)) %>%
         group_by(end_window) %>%
         filter(median==max(median))
 
 
-filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)") %>%
+filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
         filter(end_window %in% c(200,300)) %>%
         filter(time>14)%>%
         group_by(end_window) %>%
@@ -314,7 +314,7 @@ permuted_distances %>%
         group_by(time_window) %>%
         summarize(quantile(euclidean,0.999))
 
-f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
+f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
         filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
         group_by(day,end_window,cohort) %>%
         summarize(seropos=mean(spec95_seropos))%>%
@@ -329,12 +329,12 @@ f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
         ggplot()+
         geom_point(aes(col=Vaccinee,
                    y=seropos,x=day,shape=Vaccinee))+
-        geom_line(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)")%>%
+        geom_line(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])")%>%
                         mutate(end_window=factor(end_window,
                                  levels=c("45","120","200","300"),
                                  labels=c("45-day","120-day","200-day","300-day"))),
                         aes(x=time,y=median))+
-        geom_ribbon(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)")%>%
+        geom_ribbon(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])")%>%
                         mutate(end_window=factor(end_window,
                                  levels=c("45","120","200","300"),
                                  labels=c("45-day","120-day","200-day","300-day"))),
@@ -350,6 +350,13 @@ f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
         geom_hline(yintercept = 0.05,lty=2)+
         theme(legend.position = "none")
 
+
+centroids <- mds_obj %>%
+                        group_by(time_window,status) %>%
+                        summarize(D1=mean(D1),
+                                  D2=mean(D2)
+                                  )
+
 f2b <- mds_obj  %>%
         mutate(cohort=case_when(
                         cohort=="BGD Vaccinee" ~ "Bangladeshi Vaccinees",
@@ -359,8 +366,11 @@ f2b <- mds_obj  %>%
         ))%>%
                 ggplot(aes(x=D1,y=D2,col=cohort)) +
                 geom_point(aes(shape=cohort))+
+                geom_point(data=centroids,
+                           col="black",aes(shape=status),size=2,show.legend = FALSE
+                                    )+
                 scale_color_manual("Cohort", values=c("red","#003262","#FDB515"))+
-                scale_shape_manual("Cohort",values=c(2,1,1))+
+                scale_shape_manual("Cohort",values=c(2,1,17,1,19))+
                 xlab("Dimension 1")+
                 ylab("Dimension 2")+
         facet_wrap(.~time_window,scales="free")+
@@ -386,9 +396,14 @@ source("loocv.R")
 ```{r loocv-figure, eval=TRUE,fig.width=6,fig.height=10}
 
 #variable list
+#variable list
 var_list <- list(
-        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA"),
         `All Variables`= data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist()  %>% unname(),
+        `Reduced IgG Panel (and age)` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `All Variables (and age)`= data.frame(marker=colnames(final_wide)) %>%
                 filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
                 unlist() %>% c("age") %>% unname()
 )
@@ -404,8 +419,11 @@ importance<- ranger::ranger(data=final_wide %>%
                             importance = "permutation"
 )
 
-f3_loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds") %>%
-        filter(base_data_name!="bgd_fitdata")%>%
+f3_loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df.rds") %>%
+        ### limit to the correct data and variables 
+        filter(base_data_name %in% c("smicpic_fitdata","all_fitdata"))%>%
+        filter(variables %in% c("Reduced IgG Panel","All Variables"))%>%
+        #remove the all variables model for just smic/pic data
         filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
         mutate(new_modelname=case_when(
                 base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
@@ -419,8 +437,11 @@ f3_loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMI
                                                            ))) 
 
 
-f3_tvfit_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_df_SMICPIC.rds") %>%
-        filter(base_data_name!="bgd_fitdata")%>%
+f3_tvfit_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_df.rds") %>%
+        ### limit to the correct data and variables 
+        filter(base_data_name %in% c("smicpic_fitdata","all_fitdata"))%>%
+        filter(variables %in% c("Reduced IgG Panel","All Variables"))%>%
+        #remove the all variables model for just smic/pic data
         filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
         mutate(new_modelname=case_when(
                 base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
@@ -434,7 +455,10 @@ f3_tvfit_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_
                                                            ))) 
 
 f3_spec_df <- read_rds( paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_df.rds"))%>%
-        filter(base_data_name!="bgd_fitdata")%>%
+        ### limit to the correct data and variables 
+        filter(base_data_name %in% c("smicpic_fitdata","all_fitdata"))%>%
+        filter(variables %in% c("Reduced IgG Panel","All Variables"))%>%
+        #remove the all variables model for just smic/pic data
         filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
         mutate(new_modelname=case_when(
                 base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
@@ -985,7 +1009,8 @@ source("code/R/loocv_3class.R")
 ```{r threeclass-figure, eval=TRUE,fig.width=5.5,fig.height=9}
 
 
-loocv_3class_df <- read_rds("data/generated_data/loocv_3class_df.rds")
+loocv_3class_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_3class_df.rds")
+
 
 
 
@@ -996,10 +1021,11 @@ loocv_3class_df %>% filter(variables=="Reduced IgG Panel") %>%
                   )
 
 loocv_3class_df %>%
+        filter(variables %in% c("All Variables","Reduced IgG Panel"))%>%
         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
         mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
         mutate(prediction=factor(prediction)) %>%
-        group_by(variables,three_class,) %>%
+        group_by(variables,three_class) %>%
         mutate(Days=paste0(sort(unique(day)),collapse = ", ")) %>%
         group_by(variables,three_class,Days,prediction,.drop=FALSE) %>%
         summarize(n=n(),
@@ -1015,6 +1041,7 @@ loocv_3class_df %>%
 
 
 loocv_3class_df %>%
+        filter(variables %in% c("All Variables","Reduced IgG Panel"))%>%
         mutate(three_class=factor(three_class),
                prediction=factor(prediction)
                ) %>%
@@ -1287,6 +1314,40 @@ plot_grid(raw_baseline_plot,
           axis="lr",
           labels=c("A","B")
           )
+```
+
+
+### Boosting figure
+
+```{r}
+baseline_sero_data <- final_df %>%
+        filter((status=="Vaccinee" & day %in% c(0,3))|status=="Case" & day==2) %>%
+        group_by(id) %>%
+        filter(day ==min(day)) %>%
+        filter(!id %in% c("IMS_A018","IMS_B021")) %>%
+        select(id,status,cohort,antigen_pretty,isotype,baseline=RAU_value)
+                       
+
+peak_sero_data <- final_df %>% 
+        filter(status %in% c("Vaccinee","Case")) %>%
+        group_by(id,antigen_pretty,isotype) %>%
+        slice_max(order_by=RAU_value,n=1,with_ties = FALSE) %>%
+        ungroup()%>%
+        filter(!id %in% c("IMS_A018","IMS_B021"))%>%
+        select(id,status,cohort,antigen_pretty,isotype,peak=RAU_value)
+
+
+baseline_sero_data %>%
+        filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
+                                     "O139 OSP", "TcpA"
+                                     ))%>%
+        left_join(peak_sero_data) %>%
+        mutate(diff=peak-baseline) %>%
+        group_by(antigen_pretty,isotype,cohort) %>%
+        summarize(gmt=round(10^mean(diff),1)) %>%
+        ungroup() %>% spread(cohort,gmt)%>%
+        View()
+
 ```
 
 

@@ -69,11 +69,11 @@ compare_data_wide <- final_df %>%
 
 mds_obj <- bind_rows(
         compare_data_wide %>% filter(day<=45) %>%
-                generate_MDS(regex_string="Ogawa|Inaba|TcpA|CtxB|LT-B|LTh|CTHT|IgG_O139") %>% mutate(time_window="<=45 days"),
+                generate_MDS(regex_string="Ogawa|Inaba|TcpA|CtxB|IgG_O139") %>% mutate(time_window="<=45 days"),
         compare_data_wide %>% filter(day>45 & day<=120)%>%
-                generate_MDS(regex_string="Ogawa|Inaba|TcpA|CtxB|LT-B|LTh|CTHT|IgG_O139") %>% mutate(time_window="46-120 days"),
+                generate_MDS(regex_string="Ogawa|Inaba|TcpA|IgG_O139") %>% mutate(time_window="46-120 days"),
         compare_data_wide %>% filter(day>120 & day<=200)%>%
-                generate_MDS(regex_string="Ogawa|Inaba|TcpA|CtxB|LT-B|LTh|CTHT|IgG_O139") %>% mutate(time_window="121-200 days")
+                generate_MDS(regex_string="Ogawa|Inaba|TcpA|CtxB|IgG_O139") %>% mutate(time_window="121-200 days")
 )%>%
         mutate(time_window=factor(time_window,
                                   levels=c("<=45 days",
@@ -83,7 +83,7 @@ mds_obj <- bind_rows(
         ))
 
 
-write_rds(mds_obj,"data/generated_data/analysis_objects/mds_obj.rds")
+write_rds(mds_obj,"data/generated_data/analysis_objects/mds/mds_obj.rds")
 
 
 #####
@@ -132,7 +132,7 @@ for (i in 1:n_permutations) {
         
 }
 
-write_rds(permuted_distances,"data/generated_data/analysis_objects/permuted_distances.rds")
+write_rds(permuted_distances,"data/generated_data/analysis_objects/mds/permuted_distances.rds")
 
 permuted_distances %>%
         group_by(time_window) %>%
