@@ -13,9 +13,9 @@ options(mc.cores = 1)
 loocv_spec_list <- read_rds(
         paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_list.rds")
 )
-loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list_SMICPIC.rds")
+loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list.rds")
 
-loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds")
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df.rds")
 
 # 0. Stan model list
 
@@ -130,8 +130,8 @@ original_spec_beta <- MASS::fitdistr(original_spec_dist$spec,
 #load stan fit
 original_tvfpr_fit <- read_rds("data/generated_data/analysis_objects/misclassification/tvfpr_fit.rds")
 
-original_vax_fitdata <-original_tvfpr_fit$`200`$`All Vaccinees`$data
-original_vax_spread <- original_tvfpr_fit$`200`$`All Vaccinees`$fit%>% 
+original_vax_fitdata <-original_tvfpr_fit$`200`$`All Vaccinees (Reduced IgG Panel [NO AGE])`$data
+original_vax_spread <- original_tvfpr_fit$`200`$`All Vaccinees (Reduced IgG Panel [NO AGE])`$fit%>% 
         spread_draws(`(Intercept)`,
                      b[term,group],
                      day1,day2,day3
