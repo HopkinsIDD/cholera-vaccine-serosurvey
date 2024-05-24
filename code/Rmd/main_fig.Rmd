@@ -415,7 +415,16 @@ importance<- ranger::ranger(data=final_wide %>%
                             formula=make_formula("inf_200",var_list[["All Variables"]]),
                             num.trees= tree_param,
                             case.weights = NULL,
-                            replace = TRUE,
+                            importance = "permutation"
+)
+
+#get permutation importance
+importance<- ranger::ranger(data=final_wide %>%
+                filter(cohort %in% c("SMIC/PIC","BGD Vaccinee","HTI Vaccinee"))%>%
+                                    addInfectionWindow(end_window=200),
+                            formula=make_formula("inf_200",var_list[["Reduced IgG Panel"]]),
+                            num.trees= tree_param,
+                            case.weights = NULL,
                             importance = "permutation"
 )
 
