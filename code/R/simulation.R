@@ -343,15 +343,15 @@ simulation_df <-data.frame()
 sims_original <- list()
 lambda_df <- data.frame()
 
-simulations <- 100
+simulations <- 1000
 n_survey <- 1000
 coverage_values <- c(0, 0.25, 0.5, 0.75)
 campaign_timepoints <- c(21,120)
 
 stan_model_compiled <- stan_model("code/stan/vax-model-simplified.stan")
 
-
-for(true_seroinc in c(0.05,0.1,0.2)){ #choose several values of true seroincidence to look at
+true_seroinc <- 0.1
+# for(true_seroinc in c(0.05,0.1,0.2)){ #choose several values of true seroincidence to look at
 for(cov in coverage_values){
         
         
@@ -548,7 +548,8 @@ for(cov in coverage_values){
                                ".rds"))
                      
              }
-}}
+}
+# }
                 
 
 

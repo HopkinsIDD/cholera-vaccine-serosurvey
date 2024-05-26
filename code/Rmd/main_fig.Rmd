@@ -892,16 +892,16 @@ lambda_df <- read_rds("data/generated_data/analysis_objects/simulation/lambda_df
 sims_original <- read_rds("data/generated_data/analysis_objects/simulation/sims_original_10.rds")
 
 #get the truth form the simulations in the right format
-sims_viz <- filter(simulation_df,campaign_day==21, coverage==0) %>%
+sims_viz <- filter(simulation_df,campaign_day==21) %>%
         filter(incidence==0.10)%>%
-                distinct(simulation,truth) %>%
+                select(simulation,truth,coverage) %>%
                 mutate(`Ignore 21`=truth,
                        `Ignore 120`=truth,
                        `Questionnaire 21`=truth,
                        `Alternative NA`=truth,
                        ) %>%
                 select(-truth) %>%
-                gather(new_strategy, truth,-simulation) %>%
+                gather(new_strategy, truth,-c(simulation,coverage)) %>%
         mutate(new_strategy = factor(new_strategy,
                                      levels=c("Ignore 21", "Ignore 120",
                                               "Questionnaire 21", "Alternative NA"
@@ -910,11 +910,11 @@ sims_viz <- filter(simulation_df,campaign_day==21, coverage==0) %>%
                                               "Original Model +\nQuestionnaire\n(21 days)", "Alternative Model 1\n(21 days)")
         )
         ) %>%
-        expand_grid(coverage=c("0% Coverage",
-                        "25% Coverage",
-                        "50% Coverage",
-                        "75% Coverage"
-        ))%>%
+        # expand_grid(coverage=c("0% Coverage",
+        #                 "25% Coverage",
+        #                 "50% Coverage",
+        #                 "75% Coverage"
+        # ))%>%
         mutate(new_coverage=factor(coverage,
                                    labels=c("0% Coverage",
                                             "25% Coverage",
