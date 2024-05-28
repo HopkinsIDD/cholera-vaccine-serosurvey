@@ -7,28 +7,29 @@ clean_sample_data <- read_rds('data/generated_data/quality_control/clean_sample_
 
 #check the different study codes for trajectories to see if there are any bad ones
 study_codes <- unique(clean_sample_data$studycode)
-s = 4
+s = 1
 
 
 tmp_trajectory <- clean_sample_data %>%
         filter(subclass=="total")%>%
-        filter(studycode ==study_codes[s]) %>%
+        filter(studycode %in% study_codes[s]) %>%
         filter(str_detect(antigen_exponent,"CtxB|Ogawa"))
 
 tmp_ids <- unique(tmp_trajectory$id)
-select_ids <-1:10
+select_ids <-1:33
 
 tmp_trajectory %>%
+        filter(isotype=="IgG")%>%
         filter(id %in% tmp_ids[select_ids]) %>%
         ggplot(aes(x=day,y=1/RAU_value,col=antigen_exponent))+
         geom_line()+
         geom_point()+
         scale_y_continuous(trans = "log10")+
-        facet_grid(isotype~id)+
+        facet_wrap(.~id)+
         cowplot::theme_cowplot()+
         theme(axis.text.x = element_text(angle=45,hjust=1))
 
-select_ids <- select_ids +10
+select_ids <- select_ids +33
 
 #Maybe remove
 #IMS_C004 Day 17

@@ -43,6 +43,29 @@ final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
 
 ## Main Text 
 
+### Abstract
+
+```{r}
+
+final_wide %>%
+        filter(studycode!="E01JH") %>%
+        nrow()
+
+```
+
+### Methods
+
+
+```{r}
+read_rds("data/generated_data/quality_control/complete_raw_data.rds") %>%
+        filter(subclass=="total")%>%
+        count(Count<30) %>%
+        mutate(percent=100*n/sum(n))
+
+
+```
+
+
 ### Study Population
 
 ```{r}
@@ -96,7 +119,15 @@ final_wide %>%
         count(day,individuals) %>%
         mutate(percent=round(n/individuals,2)*100)
 
+
+final_wide %>%
+        filter(cohort %in% c("SMIC/PIC")) %>%
+        filter(status=="Case")%>%
+        count(id) %>% 
+        summary()
 ```
+
+### Antibody kinetics of vaccinated volunteers and confirmed cholera cases
 
 
 
@@ -366,9 +397,6 @@ f2b <- mds_obj  %>%
         ))%>%
                 ggplot(aes(x=D1,y=D2,col=cohort)) +
                 geom_point(aes(shape=cohort))+
-                geom_point(data=centroids,
-                           col="black",aes(shape=status),size=2,show.legend = FALSE
-                                    )+
                 scale_color_manual("Cohort", values=c("red","#003262","#FDB515"))+
                 scale_shape_manual("Cohort",values=c(2,1,17,1,19))+
                 xlab("Dimension 1")+
@@ -379,8 +407,17 @@ f2b <- mds_obj  %>%
 
 
 
-plot_grid(f2a,f2b,ncol=1,
-          labels=c("A","B"))
+plot_grid(f2b+
+                geom_point(data=centroids,
+                           col="black",aes(shape=status),size=2,show.legend = FALSE
+                                    )+
+                  theme(legend.position = "none"),
+                get_legend(f2b),
+                f2a,
+          ncol=1,
+          labels=c("A","","B"),
+          rel_heights = c(0.9,0.1,1)
+          )
 
 ```
 
@@ -1304,7 +1341,7 @@ GMT_ratio_plot <- bootDF %>%
         facet_wrap(.~antigen_pretty,nrow=1)+
         geom_hline(yintercept=1,lty=2)+
         theme_bw()+
-        scale_y_continuous("Geometric Mean\nMFI Ratio", trans="log2")+
+        scale_y_continuous("Geometric Mean\nRAU Ratio", trans="log2")+
         xlab("Age Group")+
         theme(
               legend.position = "bottom",
@@ -1330,7 +1367,7 @@ plot_grid(raw_baseline_plot,
 
 ```{r}
 baseline_sero_data <- final_df %>%
-        filter((status=="Vaccinee" & day %in% c(0,3))|status=="Case" & day==2) %>%
+        filter((status=="Vaccinee" & day %in% c(0,3))|(status=="Case" & day==2)) %>%
         group_by(id) %>%
         filter(day ==min(day)) %>%
         filter(!id %in% c("IMS_A018","IMS_B021")) %>%
@@ -1339,6 +1376,7 @@ baseline_sero_data <- final_df %>%
 
 peak_sero_data <- final_df %>% 
         filter(status %in% c("Vaccinee","Case")) %>%
+        filter(!((status=="Vaccinee" & day %in% c(0,3))|(status=="Case" & day==2))) %>%
         group_by(id,antigen_pretty,isotype) %>%
         slice_max(order_by=RAU_value,n=1,with_ties = FALSE) %>%
         ungroup()%>%
@@ -1351,12 +1389,18 @@ baseline_sero_data %>%
                                      "O139 OSP", "TcpA"
                                      ))%>%
         left_join(peak_sero_data) %>%
-        mutate(diff=peak-baseline) %>%
+        mutate(diff=peak-baseline) %>% 
+        filter(!is.na(diff))%>%
+        mutate(cohort=ifelse(cohort=="SMIC/PIC","BGD Case",cohort))%>%
         group_by(antigen_pretty,isotype,cohort) %>%
-        summarize(gmt=round(10^mean(diff),1)) %>%
+        summarize(gmt=round(10^mean(diff),1)) %>% 
         ungroup() %>% spread(cohort,gmt)%>%
-        View()
-
+        rename(Antigen=antigen_pretty,
+               Isotype=isotype
+               )%>%
+        arrange(Antigen,Isotype)%>%
+        flextable::flextable() %>%
+        flextable::autofit()
 ```
 
 

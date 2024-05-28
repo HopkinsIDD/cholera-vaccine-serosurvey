@@ -107,6 +107,10 @@ for(i in 1:nrow(batches)){
 }
 
 
+read_rds(glue::glue("{new_dir}/{this_batch$batch}_merge.rds"))[["extract_merge"]] %>% 
+        View()
+
+
 #calculate the averages and fit standard curves for each batch
 standards_curves <- list()
 control_data <- data.frame() 
