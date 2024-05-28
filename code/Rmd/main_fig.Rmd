@@ -288,18 +288,9 @@ mds_obj <- read_rds("data/generated_data/analysis_objects/mds/mds_obj.rds")
 permuted_distances <- read_rds("data/generated_data/analysis_objects/mds/permuted_distances.rds")
 
 
-misclassify_df %>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
-        filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
-        filter(end_window %in% c("45"))%>%
-        group_by(end_window,cohort) %>%
-        summarize(seropos=sum(spec95_seropos),
-                  n=n(),
-                  )%>%
-        mutate(per_pos=seropos/n)
-
 misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
         filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
-        filter(end_window %in% c("120"))%>%
+        filter(end_window %in% c("45"))%>%
         group_by(day,end_window,cohort) %>%
         summarize(seropos=sum(spec95_seropos),
                   n=n(),
@@ -309,13 +300,13 @@ misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
 
 
 filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
-        filter(end_window %in% c(200,300)) %>%
+        filter(end_window %in% c(120,200,300)) %>%
         group_by(end_window) %>%
         filter(median==max(median))
 
 
 filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
-        filter(end_window %in% c(200,300)) %>%
+        filter(end_window %in% c(120,200,300)) %>%
         filter(time>14)%>%
         group_by(end_window) %>%
         slice_min(abs(median-0.05),n=1)
@@ -445,6 +436,8 @@ var_list <- list(
                 unlist() %>% c("age") %>% unname()
 )
 
+tree_param <- 1000
+
 #get permutation importance
 importance<- ranger::ranger(data=final_wide %>%
                 filter(cohort %in% c("SMIC/PIC","BGD Vaccinee","HTI Vaccinee"))%>%
@@ -455,6 +448,8 @@ importance<- ranger::ranger(data=final_wide %>%
                             importance = "permutation"
 )
 
+importance$variable.importance %>% sort()
+
 #get permutation importance
 importance<- ranger::ranger(data=final_wide %>%
                 filter(cohort %in% c("SMIC/PIC","BGD Vaccinee","HTI Vaccinee"))%>%
@@ -464,6 +459,9 @@ importance<- ranger::ranger(data=final_wide %>%
                             case.weights = NULL,
                             importance = "permutation"
 )
+importance$variable.importance%>% sort()
+
+
 
 f3_loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df.rds") %>%
         ### limit to the correct data and variables 
