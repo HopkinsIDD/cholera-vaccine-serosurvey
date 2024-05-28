@@ -544,6 +544,8 @@ f3b <- f3_loocv_df %>%
         scale_color_brewer("Model",palette ="Dark2")+
         theme_cowplot()
 
+levels(f3_loocv_df$new_modelname)
+
 plotROC::calc_auc(f3a)
 plotROC::calc_auc(f3b)
 
@@ -561,7 +563,10 @@ f3c <- f3_loocv_df %>%
                 facet_grid(.~new_modelname,scales="free_x",space="free")+
                 scale_color_brewer("Model",palette ="Dark2")+
                 scale_fill_brewer("Model",palette ="Dark2")+
-                cowplot::theme_cowplot()+
+                theme_bw()+
+                theme(  panel.grid.major.x=element_blank(),
+                        panel.grid.minor =element_blank(),
+                        )+
                 ylab("Sensitivity")+
                 xlab("Days after symptom onset")
 
@@ -570,10 +575,13 @@ f3d <- f3_spec_df %>%
                 geom_point(aes(x=population,y=median,col=new_modelname))+
                 geom_linerange(aes(x=population,ymin=lb,ymax=ub,col=new_modelname))+
                 scale_color_brewer("Model",palette ="Dark2")+
-                cowplot::theme_cowplot()+
+                theme_bw()+
+                theme(  panel.grid.major.x=element_blank(),
+                        panel.grid.minor =element_blank(),
+                        axis.text.x = element_text(angle=45,hjust = 1)
+                        )+
                 geom_hline(yintercept = 0.95,lty=2)+
         facet_grid(.~new_modelname,scales="free_x")+
-        theme(axis.text.x = element_text(angle=45,hjust = 1))+
         scale_y_continuous("Specificity",limits=c(0.85,1))+
         xlab("Population")
         
