@@ -389,7 +389,7 @@ f2b <- mds_obj  %>%
                 ggplot(aes(x=D1,y=D2,col=cohort)) +
                 geom_point(aes(shape=cohort))+
                 scale_color_manual("Cohort", values=c("red","#003262","#FDB515"))+
-                scale_shape_manual("Cohort",values=c(2,1,17,1,19))+
+                scale_shape_manual("Cohort",values=c(2,1,1))+
                 xlab("Dimension 1")+
                 ylab("Dimension 2")+
         facet_wrap(.~time_window,scales="free")+
@@ -402,6 +402,7 @@ plot_grid(f2b+
                 geom_point(data=centroids,
                            col="black",aes(shape=status),size=2,show.legend = FALSE
                                     )+
+                  scale_shape_manual("Cohort",values=c(2,1,17,1,19))+
                   theme(legend.position = "none"),
                 get_legend(f2b),
                 f2a,
