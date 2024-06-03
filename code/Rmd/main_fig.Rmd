@@ -443,9 +443,9 @@ tvsens_draws %>%
         group_by(.draw,model) %>%
         summarize(avg_sens=mean(theta)) %>%
         group_by(model)%>%
-        summarize(median=mean(avg_sens),
-                  lb=quantile(avg_sens,0.025),
-                  ub=quantile(avg_sens,0.975)
+        summarize(median=round(100*median(avg_sens)),
+                  lb=round(100*quantile(avg_sens,0.025)),
+                  ub=round(100*quantile(avg_sens,0.975))
                   )
 
 
@@ -551,7 +551,12 @@ f3_spec_df <- read_rds( paste0("data/generated_data/analysis_objects/loocv/","lo
 
         )) 
 
-
+f3_spec_df %>%
+        mutate(
+               median=round(100*median), 
+               lb=round(100*lb),
+               ub=round(100*ub)) %>%
+        select(new_modelname,population,median,lb,ub)
 
 # f3a <- f3_loocv_df %>%
 #         filter(cohort=="SMIC/PIC") %>%
