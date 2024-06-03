@@ -422,6 +422,36 @@ source("loocv.R")
 
 ```
 
+
+```{r avg-sens}
+
+loocv_tvfit_list <- read_rds(
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_list.rds")
+)
+
+tvsens_draws <- bind_rows(
+        loocv_tvfit_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$out_df %>%
+                mutate(model="Original Model"),
+        loocv_tvfit_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$out_df %>%
+                mutate(model="Alternative Model 1"),
+        loocv_tvfit_list$`All Variables`$all_fitdata$`200-day`$Case$out_df %>%
+                mutate(model="Alernative Model 2")
+        )%>%
+        filter(time<=200)
+
+tvsens_draws %>%
+        group_by(.draw,model) %>%
+        summarize(avg_sens=mean(theta)) %>%
+        group_by(model)%>%
+        summarize(median=mean(avg_sens),
+                  lb=quantile(avg_sens,0.025),
+                  ub=quantile(avg_sens,0.975)
+                  )
+
+
+```
+
+
 ```{r loocv-figure, eval=TRUE,fig.width=6,fig.height=10}
 
 #variable list
@@ -1137,7 +1167,7 @@ loocv_3class_df %>%
         scale_fill_distiller("Percent\nClassified",palette = "Oranges",
                              direction = 1
                              )+
-        xlab("Observed Class")+
+        xlab("True Class")+
         ylab("Predicted Class")+
         theme_cowplot()
         # theme(axis.text.x = element_text(angle=45,hjust=1))
