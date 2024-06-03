@@ -523,18 +523,29 @@ f3_spec_df <- read_rds( paste0("data/generated_data/analysis_objects/loocv/","lo
 
 
 
-f3a <- f3_loocv_df %>%
-        filter(cohort=="SMIC/PIC") %>%
-        ggplot(alpha=0.7)+ 
-        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=new_modelname),labels=FALSE,n.cuts=0)+ 
-        geom_abline(lty=3,col="grey50")+
-        xlab("False Positivity Rate")+
-        ylab("True Positivity Rate")+
-        scale_color_brewer("Model",palette ="Dark2")+
-        theme_cowplot()
+# f3a <- f3_loocv_df %>%
+#         filter(cohort=="SMIC/PIC") %>%
+#         ggplot(alpha=0.7)+ 
+#         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=new_modelname),labels=FALSE,n.cuts=0)+ 
+#         geom_abline(lty=3,col="grey50")+
+#         xlab("False Positivity Rate")+
+#         ylab("True Positivity Rate")+
+#         scale_color_brewer("Model",palette ="Dark2")+
+#         theme_cowplot()
+# 
+# f3b <- f3_loocv_df %>%
+#         filter(base_data_name=="all_fitdata")%>%
+#         ggplot()+ 
+#         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)),
+#                               col=new_modelname),labels=FALSE,n.cuts=0
+#                           )+ 
+#         geom_abline(lty=3,col="grey50")+
+#         xlab("False Positivity Rate")+
+#         ylab("True Positivity Rate")+
+#         scale_color_brewer("Model",palette ="Dark2")+
+#         theme_cowplot()
 
-f3b <- f3_loocv_df %>%
-        filter(base_data_name=="all_fitdata")%>%
+f3a <- f3_loocv_df %>%
         ggplot()+ 
         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)),
                               col=new_modelname),labels=FALSE,n.cuts=0
@@ -545,10 +556,9 @@ f3b <- f3_loocv_df %>%
         scale_color_brewer("Model",palette ="Dark2")+
         theme_cowplot()
 
-levels(f3_loocv_df$new_modelname)
+
 
 plotROC::calc_auc(f3a)
-plotROC::calc_auc(f3b)
 
 f3c <- f3_loocv_df %>%
         filter(inf_200==1)%>%
@@ -589,17 +599,33 @@ f3d <- f3_spec_df %>%
 
 f3_spec_df
 
-plot_grid(f3a+ggtitle("Cases and uninfected\ncontacts only")+
+# plot_grid(f3a+ggtitle("Cases and uninfected\ncontacts only")+
+#                   theme(legend.position = c(0.25,0.4),
+#                         legend.background = element_rect(fill = "white",color = "black"))
+#                   ,
+#           f3b+ggtitle("All samples")+
+#                   theme(legend.position ="none"),nrow=1,align="h",
+#                   labels = c("A","B")) %>%
+#         plot_grid(f3c+theme(legend.position ="none"),
+#                   f3d+theme(legend.position ="none"),ncol=1,
+#                   labels = c("","C","D")
+#                   )
+
+
+plot_grid(
+        plot_grid(f3a+#ggtitle("Cases and uninfected\ncontacts only")+
                   theme(legend.position = c(0.25,0.4),
-                        legend.background = element_rect(fill = "white",color = "black"))
-                  ,
-          f3b+ggtitle("All samples")+
-                  theme(legend.position ="none"),nrow=1,align="h",
-                  labels = c("A","B")) %>%
-        plot_grid(f3c+theme(legend.position ="none"),
-                  f3d+theme(legend.position ="none"),ncol=1,
-                  labels = c("","C","D")
+                        legend.background = element_rect(fill = "white",color = "black")),
+                  ggplot()+
+                          theme_void(),
+                  rel_widths = c(2,1)
+                  ),
+        f3c+theme(legend.position ="none"),
+        f3d+theme(legend.position ="none"),ncol=1,
+                  labels = c("A","B","C"),
+                  rel_heights = c(3,2,2.5)
                   )
+
 
 
 # loocv_df %>%
@@ -1408,6 +1434,45 @@ baseline_sero_data %>%
         arrange(Antigen,Isotype)%>%
         flextable::flextable() %>%
         flextable::autofit()
+```
+
+
+## ROC comparison
+
+```{r}
+roc_1  <- f3_loocv_df %>%
+        filter(cohort=="SMIC/PIC") %>%
+        ggplot(alpha=0.7)+ 
+        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=new_modelname),labels=FALSE,n.cuts=0)+ 
+        geom_abline(lty=3,col="grey50")+
+        xlab("False Positivity Rate")+
+        ylab("True Positivity Rate")+
+        scale_color_brewer("Model",palette ="Dark2")+
+        theme_cowplot()
+
+roc_2 <- f3_loocv_df %>%
+        ggplot()+ 
+        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)),
+                              col=new_modelname),labels=FALSE,n.cuts=0
+                          )+ 
+        geom_abline(lty=3,col="grey50")+
+        xlab("False Positivity Rate")+
+        ylab("True Positivity Rate")+
+        scale_color_brewer("Model",palette ="Dark2")+
+        theme_cowplot()
+
+
+plot_grid(roc_1,roc_2)
+
+plot_grid(roc_1+ggtitle("Cases and uninfected\ncontacts only")+
+                  theme(legend.position = c(0.25,0.4),
+                        legend.background = element_rect(fill = "white",color = "black"))
+                  ,
+          roc_2+ggtitle("All samples")+
+                  theme(legend.position ="none"),nrow=1,align="h",
+                  labels = c("A","B"))
+
+
 ```
 
 
