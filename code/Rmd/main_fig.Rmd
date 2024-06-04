@@ -786,9 +786,9 @@ The number of days since the first dose of the campaign is shown in parentheses.
 loocv_spec_list <- read_rds(
         paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_list.rds")
 )
-loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list_SMICPIC.rds")
+loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list.rds")
 
-loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_SMICPIC.rds")
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df.rds")
 
 
 #load stan fit
