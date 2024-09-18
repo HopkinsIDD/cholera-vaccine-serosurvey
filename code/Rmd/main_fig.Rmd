@@ -773,6 +773,99 @@ plot_grid(
 ```
 
 
+```{r newfigure3, eval=FALSE}
+
+#load the original model objects
+tvfpr_df <- read_rds("data/generated_data/analysis_objects/misclassification/tvfpr_df.rds")
+tvfpr_fit <- read_rds(
+          paste0("data/generated_data/analysis_objects/misclassification/","tvfpr_fit.rds")
+)
+
+tvfpr_fit_200 <- tvfpr_fit$`200`$`All Vaccinees (Reduced IgG Panel [NO AGE])`
+
+#load the new model objects
+
+loocv_tvfit_df <- read_rds(
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_df_new.rds")
+)
+
+loocv_spec_df<- read_rds(
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_df_new.rds")
+)
+
+
+p1 <- loocv_tvfit_df %>%
+        filter(population=="Vaccinee")%>%
+        filter(str_detect(variables,"reduced"))%>%
+        ggplot(aes(col=variables,fill=variables))+
+                geom_line(aes(x=time,y=median))+
+                geom_ribbon(aes(x=time,ymin=lb,ymax=ub),alpha=0.5,col=NA)+
+                geom_line(data=tvfpr_df %>%
+                                  filter(end_window==200)%>%
+                                  filter(population=="All Vaccinees (Reduced IgG Panel [NO AGE])"),
+                          col="black",aes(x=time,y=median),
+                          inherit.aes = FALSE
+                          )+
+        scale_color_manual(values = c("red","blue"))+
+        scale_fill_manual(values = c("red","blue"))+
+        xlab("Days since vaccination")+
+        scale_y_continuous("False Positive Rate",limits = c(0,0.25))+
+        geom_hline(yintercept = 0.05,lty=2)+
+        theme_cowplot()+
+        theme(legend.position = "none")
+
+
+p2 <- bind_rows(
+        
+        tvfpr_fit_200$out_df %>% group_by(.draw)%>%
+        summarize(avg=mean(theta)) %>%
+        ungroup()%>%
+        summarize(median=median(avg),
+                  lb=quantile(avg,0.025),
+                  ub=quantile(avg,0.975)
+                  )%>%
+        mutate(variables="original"),
+
+
+        loocv_tvfit_list$reduced_2class$all_fitdata$`200-day`$Vaccinee$out_df %>% group_by(.draw)%>%
+        summarize(avg=mean(theta)) %>%
+        ungroup()%>%
+        summarize(median=median(avg),
+                  lb=quantile(avg,0.025),
+                  ub=quantile(avg,0.975)
+                  )%>%
+        mutate(variables="reduced_2class"),
+
+
+        loocv_tvfit_list$reduced_3class$all_fitdata$`200-day`$Vaccinee$out_df %>% group_by(.draw)%>%
+        summarize(avg=mean(theta)) %>%
+        ungroup()%>%
+        summarize(median=median(avg),
+                  lb=quantile(avg,0.025),
+                  ub=quantile(avg,0.975)
+                  ) %>%
+                mutate(variables="reduced_3class")
+        
+        
+) %>% mutate(population="Vaccinee")%>% 
+        ggplot()+
+                geom_point(aes(x=population,y=median,col=variables),
+                           position = position_dodge(0.5)
+                           )+
+                geom_linerange(aes(x=population,ymin=lb,ymax=ub,col=variables),
+                           position = position_dodge(0.5)
+                           )+
+        theme_cowplot()+
+        scale_color_manual(values = c("black","red","blue"))+
+        scale_y_continuous("False Positive Rate",limits = c(0,0.25))
+
+
+
+plot_grid(p1,p2,nrow=1)
+
+```
+
+
 ### Figure 4. Simulated serological surveys in settings with varying levels of vaccination coverage using multiple strategies to calculate seroincidence. 
 
 The number of days since the first dose of the campaign is shown in parentheses. Blue line violin plots show the distribution of 100 estimates of seroincidence using different strategies (x-axis) at various levels of vaccine coverage (top of each panel). Blue dot indicates the average seroincidence estimate. Each simulated survey had 1000 persons. The true incidence was 10 infections per 100 in 200 days as shown in the grey violin plots. 

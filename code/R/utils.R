@@ -3619,6 +3619,101 @@ getPerf_ranger<- function(data, m,  truth_variable){
 }
 
 
+getPerf_ranger_new2<- function(data, preds,  truths){
+        
+        # get truths predictions
+        # truths <- data[truth_variable] %>% unlist() %>%
+        #         as.character() %>% as.numeric()
+        # pred_obj <- predict(m,data=data,predict.all=TRUE)
+        # preds <- pred_obj[[1]] %>% rowMeans()-1
+        
+        
+        # get performance
+        output_df <- NULL
+        ss <- NULL
+        fr <- NULL
+        auc <- NULL
+        
+        if(!(all(truths==1)|all(truths==0))){ #if some recent or non-recent cases
+                
+                prediction <- ROCR::prediction(predictions=preds,
+                                               labels=truths)
+                # get sens and spec
+                ss <- ROCR::performance(prediction,"sens","spec")
+                fr <- ROCR::performance(prediction,"tpr","fpr")
+                auc <- ROCR::performance(prediction,"auc")@y.values %>%
+                        unlist()
+                
+                perf_df <- data.frame(
+                        unlist(ss@x.values),
+                        unlist(ss@y.values),
+                        unlist(ss@alpha.values))
+                colnames(perf_df) <- c(ss@x.name,ss@y.name,ss@alpha.name)
+                perf_df <- perf_df %>%
+                        mutate(Youden=Sensitivity+Specificity-1)
+                # find the cutoff for the youden index
+                youden_cutoff <- perf_df %>%
+                        filter(Youden==max(Youden)) %>%
+                        filter(Sensitivity == max(Sensitivity)) %>%
+                        filter(Specificity == max(Specificity)) %>%
+                        pull(Cutoff)
+                
+                
+                # find the cutoff for the specificity
+                spec99_cutoff <- perf_df %>%
+                        filter(Specificity>=0.99) %>%
+                        filter(Sensitivity == max(Sensitivity)) %>%
+                        #want the value lowest cutoff to maximize sensitivity
+                        filter(Cutoff == min(Cutoff)) %>%
+                        pull(Cutoff)
+                
+                # find the cutoff for the specificity
+                spec95_cutoff <- perf_df %>%
+                        filter(Specificity>=0.95) %>%
+                        filter(Sensitivity == max(Sensitivity)) %>%
+                        #want the value lowest cutoff to maximize sensitivity
+                        filter(Cutoff == min(Cutoff)) %>%
+                        pull(Cutoff)
+                
+                # find the cutoff for the specificity
+                spec90_cutoff <- perf_df %>%
+                        filter(Specificity>=0.90) %>%
+                        filter(Sensitivity == max(Sensitivity)) %>%
+                        #want the value lowest cutoff to maximize sensitivity
+                        filter(Cutoff == min(Cutoff)) %>%
+                        pull(Cutoff)
+                
+                
+                output_df <- data %>%
+                        mutate(prediction=preds) %>%
+                        #get youden seropositivity
+                        mutate(youden_cutoff = youden_cutoff) %>%
+                        mutate(youden_seropos = ifelse(prediction>=youden_cutoff,1,0)) %>%
+                        #get 99% specificity seropositivity
+                        mutate(spec99_cutoff = spec99_cutoff) %>%
+                        mutate(spec99_seropos = ifelse(prediction>=spec99_cutoff,1,0)) %>%
+                        #get 95% specificity seropositivity
+                        mutate(spec95_cutoff = spec95_cutoff) %>%
+                        mutate(spec95_seropos = ifelse(prediction>=spec95_cutoff,1,0))%>%
+                        #get 90% specificity seropositivity
+                        mutate(spec90_cutoff = spec90_cutoff) %>%
+                        mutate(spec90_seropos = ifelse(prediction>=spec90_cutoff,1,0))
+                
+                
+        }
+        
+        list(
+                #data
+                data= output_df,
+                #performance metrics
+                ss = ss,
+                fr = fr,
+                auc = auc
+        )
+}
+
+
+
 getPerf_SuperLearner <- function(data, m,  truth_variable,variables){
         
         # get truths predictions
