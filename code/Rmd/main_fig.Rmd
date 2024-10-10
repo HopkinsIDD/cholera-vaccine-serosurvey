@@ -789,6 +789,10 @@ loocv_tvfit_df <- read_rds(
           paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_df_new.rds")
 )
 
+loocv_tvfit_list <- read_rds(
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_list_new.rds")
+)
+
 loocv_spec_df<- read_rds(
           paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_df_new.rds")
 )
@@ -803,19 +807,19 @@ p1 <- loocv_tvfit_df %>%
                 geom_line(data=tvfpr_df %>%
                                   filter(end_window==200)%>%
                                   filter(population=="All Vaccinees (Reduced IgG Panel [NO AGE])"),
-                          col="black",aes(x=time,y=median),
+                          col="black",aes(x=time,y=median),lwd=1,
                           inherit.aes = FALSE
                           )+
         scale_color_manual(values = c("red","blue"))+
         scale_fill_manual(values = c("red","blue"))+
         xlab("Days since vaccination")+
         scale_y_continuous("False Positive Rate",limits = c(0,0.25))+
-        geom_hline(yintercept = 0.05,lty=2)+
+        geom_hline(yintercept = 0.05,lty=2,col="grey")+
         theme_cowplot()+
         theme(legend.position = "none")
 
 
-p2 <- bind_rows(
+p2_vax_df <- bind_rows(
         
         tvfpr_fit_200$out_df %>% group_by(.draw)%>%
         summarize(avg=mean(theta)) %>%
@@ -847,21 +851,107 @@ p2 <- bind_rows(
                 mutate(variables="reduced_3class")
         
         
-) %>% mutate(population="Vaccinee")%>% 
+) %>% mutate(population="Vaccinee") 
+
+
+p2_outside_df <- loocv_spec_df %>% 
+                        filter(str_detect(variables,"reduced")) %>%
+                        filter(population=="Outside Window") %>%
+                        mutate(variables=ifelse(base_data_name=="case_fitdata",
+                                                "original",variables
+                                                )) %>%
+                        mutate(median=1-median,
+                               lb_new=1-ub,
+                               ub=1-lb
+                               )%>%
+                        select(median,lb=lb_new,ub,variables,population)#%>%
+
+p2<- bind_rows(p2_outside_df,p2_vax_df)%>%
+        mutate(Model=factor(variables,
+                            levels=c("original","reduced_2class","reduced_3class"),
+                            labels=c("Original",
+                                     "New 2 class",
+                                     "New 3 class"
+                                     )
+                            )) %>%
+        mutate(population=factor(population))%>%
+        mutate(population=fct_rev(population))%>%
         ggplot()+
-                geom_point(aes(x=population,y=median,col=variables),
+                geom_point(aes(x=population,y=median,col=Model),
                            position = position_dodge(0.5)
                            )+
-                geom_linerange(aes(x=population,ymin=lb,ymax=ub,col=variables),
+                geom_linerange(aes(x=population,ymin=lb,ymax=ub,col=Model),
                            position = position_dodge(0.5)
                            )+
         theme_cowplot()+
+        geom_hline(yintercept = 0.05,lty=2,col="grey")+
         scale_color_manual(values = c("black","red","blue"))+
-        scale_y_continuous("False Positive Rate",limits = c(0,0.25))
+        scale_y_continuous("False Positive Rate",limits = c(0,0.25))+
+        xlab("Population")
+
+p3_df <- loocv_tvfit_df %>%
+        filter(population=="Case")%>%
+        filter(str_detect(variables,"reduced"))%>%
+                        mutate(variables=ifelse(base_data_name=="case_fitdata",
+                                                "original",variables
+                                                )) %>%
+        filter(time<=200)
 
 
 
-plot_grid(p1,p2,nrow=1)
+
+p3 <- p3_df%>%
+        filter(str_detect(variables,"reduced"))%>%
+        ggplot(aes(col=variables,fill=variables))+
+                geom_line(aes(x=time,y=median))+
+                geom_ribbon(aes(x=time,ymin=lb,ymax=ub),alpha=0.5,col=NA)+
+        geom_line(data=p3_df %>%
+                          filter(variables=="original"),
+                  col="black",aes(x=time,y=median), lwd=1,
+                  inherit.aes = FALSE
+                  )+
+        scale_color_manual(values = c("red","blue"))+
+        scale_fill_manual(values = c("red","blue"))+
+        xlab("Days since infection")+
+        scale_y_continuous("Sensitivity",limits=c(0,1))+
+        theme_cowplot()+
+        theme(legend.position = "none")
+
+p4 <- loocv_df %>%
+        filter(variables=="reduced_3class") %>%
+        mutate(across(Neither:RecentlyVaccinated,.fns = ~ifelse(is.na(.x),
+                                                                0,.x
+                                                                ))) %>%
+        mutate(prediction=case_when(
+                Neither >= RecentlyInfected & Neither >=RecentlyVaccinated ~"Neither",
+                RecentlyInfected > Neither & RecentlyInfected >= RecentlyVaccinated ~"RecentlyInfected",
+                RecentlyVaccinated > Neither & RecentlyVaccinated > RecentlyInfected ~"RecentlyVaccinated"
+        )) %>%
+        mutate(three_class=factor(three_class),
+                  prediction=factor(prediction)
+        ) %>%
+        count(variables,three_class,prediction,.drop=FALSE) %>%
+        group_by(variables,three_class) %>%
+        mutate(proportion=n/sum(n)) %>%
+        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+        ggplot(aes(x=three_class,y=prediction))+
+        geom_tile(aes(fill=100*proportion))+
+        geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
+        scale_fill_distiller("Percent\nClassified",palette = "Oranges",
+                             direction = 1
+        )+
+        xlab("True Class")+
+        ylab("Predicted Class")+
+        theme_cowplot()
+
+
+plot_grid(
+        plot_grid(p1,p2,nrow=1),
+        plot_grid(p3,p4,nrow = 1),
+        nrow=2
+        )
 
 ```
 
