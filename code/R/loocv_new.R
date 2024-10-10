@@ -34,6 +34,9 @@ data_list <- list(
                         TRUE ~ "Neither"
                 )) %>%
                 mutate(three_class=factor(three_class))%>%
+                addInfectionWindow(end_window=200),
+        case_fitdata = final_wide %>%
+                filter(cohort %in% c("SMIC/PIC"))%>%
                 addInfectionWindow(end_window=200)
 )
 
@@ -50,43 +53,45 @@ loocv_df <- data.frame()
 for(v in 1:length(formula_list)){
         for (q in names(data_list)){
 
-         
+        #dont do 3 class models when no vaccinees are in the dataset
+         if(q=="case_fitdata" & names(formula_list)[v] %in% c("reduced_3class","all_3class")) next
+                
         base_data <- data_list[[q]]
         ids <- unique(base_data$id)
 
         for(i in ids){
- 
+
 
                 marks <- formula_list[[v]]
-                
-                cat("Data: ",q, "Variables: ",names(formula_list)[v],"Individiual: ",i,"\n")        
-                
+
+                cat("Data: ",q, "Variables: ",names(formula_list)[v],"Individiual: ",i,"\n")
+
                 fit_data <- base_data %>%
                         filter(id!=i) %>%
-                        addInfectionWindow(end_window=t) 
-                
+                        addInfectionWindow(end_window=t)
+
                 outcome <- paste0("inf_",t)
-                
+
                 # 1. run 100 models to find a cutoff
-                #keep 50% fit and 50% to test 
+                #keep 50% fit and 50% to test
                 cut_data <- data.frame()
-                
+
                 for(j in 1:5){ #normally 1:100
 
                         #define who is in and who is out
                         outside <-fit_data %>%
                                 distinct(cohort,id) %>%
-                                group_by(cohort) %>% 
+                                group_by(cohort) %>%
                                 slice_sample(prop=0.5,replace = FALSE) %>%
                                 pull(id)
                         outside_df <- filter(fit_data,id %in% outside)
                         inside_df  <- filter(fit_data,!id %in% outside)%>%
                                 addInfectionWindow(end_window=t)
-                        
-                        
+
+
                         inside_w = NULL
-                        
-                       
+
+
                         #fit rf model
                         inside_fit <- ranger::ranger(formula=formula_list[[v]],
                                                      data=inside_df,
@@ -94,35 +99,35 @@ for(v in 1:length(formula_list)){
                                                      case.weights = inside_w,
                                                      replace=TRUE
                         )
-                        
+
                         class_levels <- inside_fit$predictions %>% levels()
-                        
+
                         if(length(class_levels)==2){
-                                
-                                #find the cutoff for each 
+
+                                #find the cutoff for each
                                 performance <-  outside_df %>%
                                         filter(cohort %in% c("SMIC/PIC")) %>%
                                         addInfectionWindow(end_window=t) %>%
                                         getPerf_ranger(inside_fit,paste0("inf_",t))
                         }
-                        
+
                         if(length(class_levels)==3){
-                                
+
                                 tmp_performance_df <- outside_df %>%
                                         filter(cohort %in% c("SMIC/PIC")) %>%
                                         addInfectionWindow(end_window=t)
-                                
+
                                 tmp_predict <- predict(inside_fit,data=tmp_performance_df,predict.all=TRUE)
-                                
+
                                 performance <- getPerf_ranger_new2(tmp_performance_df,
                                                                    preds= rowMeans(tmp_predict[[1]]==2),#decimal (numeric)
                                                                    truths= tmp_performance_df$inf_200#1 0 (numeric)
                                                                    )
-                                
+
                         }
-                        
-                        
-                        
+
+
+
                         cut <- distinct(performance$data,youden_cutoff,
                                         spec99_cutoff,
                                         spec95_cutoff,
@@ -130,7 +135,7 @@ for(v in 1:length(formula_list)){
                         )
                         cut_data <- bind_rows(cut_data,cut)
                 }
-                
+
                 #find cutoffs
                 median_cut <- cut_data %>%
                         summarize(n =n(),
@@ -139,14 +144,14 @@ for(v in 1:length(formula_list)){
                                   spec95_cutoff=median(spec95_cutoff),
                                   spec90_cutoff=median(spec90_cutoff)
                         )
-                
+
                 print(median_cut)
-                
-                # 2. fit the model, predict, and apply cutoff 
+
+                # 2. fit the model, predict, and apply cutoff
                 #fit the model
-                
+
                 #set weights if needed
-                
+
                 w <- NULL
 
                 # w <- fit_data%>%
@@ -173,36 +178,36 @@ for(v in 1:length(formula_list)){
                 # test_missing <- rowSums(is.na(test_data[formula_list[[v]]])) >0
                 #
                 # test_data <- test_data[!test_missing,]
-                
+
                 if(length(class_levels)==2){
-                        
-                        
+
+
                         test_data["truth"] <- test_data[outcome]
                         out_preds <-predict(this_fit,
                                             test_data,
                                             predict.all=TRUE)
-                        
+
                         test_pred <- out_preds[[1]] %>% rowMeans()-1
-                        
+
                 }
                 if(length(class_levels)==3){
-                        
+
                         test_data["truth"] <- test_data[outcome]
                         out_preds <-predict(this_fit,
                                             test_data,
                                             predict.all=TRUE)
-                        
+
                         test_pred <- rowMeans(out_preds[[1]]==2)
-                        
+
                         specific_preds <- out_preds[[1]] %>% t() %>%
                                 as.data.frame() %>%
                                 gather(V_id,value) %>%
-                                count(V_id,value) %>% 
+                                count(V_id,value) %>%
                                 mutate(value=factor(value,levels=c(1,2,3),labels=class_levels)) %>%
-                                spread(value,n) 
-                        
+                                spread(value,n)
+
                 }
-                
+
 
                 #store the data
                 fpr_df <- test_data %>%
@@ -227,12 +232,12 @@ for(v in 1:length(formula_list)){
                         mutate(variables=names(formula_list)[v]) %>%
                         mutate(end_window=as.character(t)) %>%
                         mutate(base_data_name=q)
-                
-                
+
+
                 if(length(class_levels)==3){
-                        
+
                         fpr_df <- bind_cols(fpr_df,specific_preds)
-                        
+
                 }
 
                 out_tmp <- list(
@@ -319,9 +324,9 @@ loocv_df %>%
                   neither_pred=mean(prediction=="Neither")
                   ) %>%
         gather(pred_class,proportion,-c(day,variables,three_class,n))%>%
-        ggplot(aes(x=factor(day),y=vax_pred))+
-        geom_col(aes(fill=variables),position=position_dodge2(0.1))+
-        facet_wrap(.~three_class)
+        ggplot(aes(x=factor(day),y=proportion))+
+        geom_col(aes(fill=pred_class))+
+        facet_wrap(variables~three_class,scales = "free")
 
 
 # loocv_df %>%
