@@ -799,6 +799,7 @@ loocv_spec_df<- read_rds(
 
 
 p1 <- loocv_tvfit_df %>%
+        filter(time<=200)%>%
         filter(population=="Vaccinee")%>%
         filter(str_detect(variables,"reduced"))%>%
         ggplot(aes(col=variables,fill=variables))+
@@ -806,6 +807,7 @@ p1 <- loocv_tvfit_df %>%
                 geom_ribbon(aes(x=time,ymin=lb,ymax=ub),alpha=0.5,col=NA)+
                 geom_line(data=tvfpr_df %>%
                                   filter(end_window==200)%>%
+                                  filter(time<=200)%>%
                                   filter(population=="All Vaccinees (Reduced IgG Panel [NO AGE])"),
                           col="black",aes(x=time,y=median),lwd=1,
                           inherit.aes = FALSE
@@ -849,9 +851,8 @@ p2_vax_df <- bind_rows(
                   ub=quantile(avg,0.975)
                   ) %>%
                 mutate(variables="reduced_3class")
-        
-        
-) %>% mutate(population="Vaccinee") 
+) %>% mutate(population="Vaccinated")  %>%
+        filter(time<=200)
 
 
 p2_outside_df <- loocv_spec_df %>% 
@@ -864,7 +865,8 @@ p2_outside_df <- loocv_spec_df %>%
                                lb_new=1-ub,
                                ub=1-lb
                                )%>%
-                        select(median,lb=lb_new,ub,variables,population)#%>%
+                        select(median,lb=lb_new,ub,variables,population)%>%
+                        mutate(population="Unvaccinated")
 
 p2<- bind_rows(p2_outside_df,p2_vax_df)%>%
         mutate(Model=factor(variables,
@@ -939,8 +941,8 @@ p4 <- loocv_df %>%
         ggplot(aes(x=three_class,y=prediction))+
         geom_tile(aes(fill=100*proportion))+
         geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
-        scale_fill_distiller("Percent\nClassified",palette = "Oranges",
-                             direction = 1
+        scale_fill_distiller("Percent\nClassified",palette = "Purples",
+                             direction = 1,limits=c(0,100),
         )+
         xlab("True Class")+
         ylab("Predicted Class")+
@@ -948,8 +950,8 @@ p4 <- loocv_df %>%
 
 
 plot_grid(
-        plot_grid(p1,p2,nrow=1),
-        plot_grid(p3,p4,nrow = 1),
+        plot_grid(p1,p2,nrow=1,rel_widths = c(0.8,1.2), labels=c("A","B")),
+        plot_grid(p3,p4,nrow = 1,rel_widths = c(0.8,1.2), labels=c("C","D")),
         nrow=2
         )
 
