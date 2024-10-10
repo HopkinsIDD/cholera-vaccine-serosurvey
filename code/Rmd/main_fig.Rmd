@@ -797,6 +797,8 @@ loocv_spec_df<- read_rds(
           paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_df_new.rds")
 )
 
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_new.rds")
+
 
 p1 <- loocv_tvfit_df %>%
         filter(time<=200)%>%
@@ -823,7 +825,8 @@ p1 <- loocv_tvfit_df %>%
 
 p2_vax_df <- bind_rows(
         
-        tvfpr_fit_200$out_df %>% group_by(.draw)%>%
+        tvfpr_fit_200$out_df %>%
+        filter(time<=200) %>% group_by(.draw)%>%
         summarize(avg=mean(theta)) %>%
         ungroup()%>%
         summarize(median=median(avg),
@@ -833,7 +836,8 @@ p2_vax_df <- bind_rows(
         mutate(variables="original"),
 
 
-        loocv_tvfit_list$reduced_2class$all_fitdata$`200-day`$Vaccinee$out_df %>% group_by(.draw)%>%
+        loocv_tvfit_list$reduced_2class$all_fitdata$`200-day`$Vaccinee$out_df %>%
+        filter(time<=200) %>% group_by(.draw)%>%
         summarize(avg=mean(theta)) %>%
         ungroup()%>%
         summarize(median=median(avg),
@@ -843,7 +847,8 @@ p2_vax_df <- bind_rows(
         mutate(variables="reduced_2class"),
 
 
-        loocv_tvfit_list$reduced_3class$all_fitdata$`200-day`$Vaccinee$out_df %>% group_by(.draw)%>%
+        loocv_tvfit_list$reduced_3class$all_fitdata$`200-day`$Vaccinee$out_df %>%
+        filter(time<=200)%>% group_by(.draw)%>%
         summarize(avg=mean(theta)) %>%
         ungroup()%>%
         summarize(median=median(avg),
@@ -851,9 +856,7 @@ p2_vax_df <- bind_rows(
                   ub=quantile(avg,0.975)
                   ) %>%
                 mutate(variables="reduced_3class")
-) %>% mutate(population="Vaccinated")  %>%
-        filter(time<=200)
-
+) %>% mutate(population="Vaccinated")  
 
 p2_outside_df <- loocv_spec_df %>% 
                         filter(str_detect(variables,"reduced")) %>%
@@ -941,7 +944,7 @@ p4 <- loocv_df %>%
         ggplot(aes(x=three_class,y=prediction))+
         geom_tile(aes(fill=100*proportion))+
         geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
-        scale_fill_distiller("Percent\nClassified",palette = "Purples",
+        scale_fill_distiller("Percent\nClassified",palette = "Blues",
                              direction = 1,limits=c(0,100),
         )+
         xlab("True Class")+
