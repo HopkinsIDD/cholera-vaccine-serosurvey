@@ -305,11 +305,25 @@ filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
         filter(median==max(median))
 
 
+
 filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
         filter(end_window %in% c(120,200,300)) %>%
-        filter(time>14)%>%
         group_by(end_window) %>%
-        slice_min(abs(median-0.05),n=1)
+        filter(median>=0.05) %>%
+        filter(time==min(time))
+
+filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
+        filter(end_window %in% c(120,200,300)) %>%
+        group_by(end_window) %>%
+        filter(median>=0.05) %>%
+        filter(time==max(time))
+
+
+# filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
+#         filter(end_window %in% c(120,200,300)) %>%
+#         filter(time>14)%>%
+#         group_by(end_window) %>%
+#         slice_min(abs(median-0.05),n=1)
 
 
 misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
@@ -370,7 +384,9 @@ f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
         scale_color_manual(values = c("#003262","#FDB515"))+
         scale_shape_manual(values=c(1,1))+
         geom_hline(yintercept = 0.05,lty=2)+
-        theme(legend.position = "none")
+        theme(legend.position = "bottom")
+        
+        
 
 
 centroids <- mds_obj %>%
@@ -874,9 +890,9 @@ p2_outside_df <- loocv_spec_df %>%
 p2<- bind_rows(p2_outside_df,p2_vax_df)%>%
         mutate(Model=factor(variables,
                             levels=c("original","reduced_2class","reduced_3class"),
-                            labels=c("Original",
-                                     "New 2 class",
-                                     "New 3 class"
+                            labels=c("Case-only model",
+                                     "Mixed-cohort model",
+                                     "Mixed-cohort 3-class model"
                                      )
                             )) %>%
         mutate(population=factor(population))%>%
@@ -953,8 +969,8 @@ p4 <- loocv_df %>%
 
 
 plot_grid(
-        plot_grid(p1,p2,nrow=1,rel_widths = c(0.8,1.2), labels=c("A","B")),
-        plot_grid(p3,p4,nrow = 1,rel_widths = c(0.8,1.2), labels=c("C","D")),
+        plot_grid(p1,p2,nrow=1,rel_widths = c(1,1), labels=c("A","B")),
+        plot_grid(p3,p4,nrow = 1,rel_widths = c(1,1), labels=c("C","D")),
         nrow=2
         )
 
@@ -1300,10 +1316,22 @@ lambda_df  %>%
 ```{r}
 
 
-lambda_df  %>%
-        mutate(campaign_day=ifelse(adjustment=="Alternative",21,campaign_day))%>%
-        mutate(new_strategy=paste(adjustment,campaign_day)) %>%
-        mutate(campaign_day=glue::glue("{campaign_day} days post campaign start"))%>%
+graph_altlambda_df<- lambda_df  %>%
+                                filter(adjustment=="Alternative") 
+                        
+
+
+bind_rows(lambda_df %>% filter(adjustment!="Alternative"),
+          graph_altlambda_df %>% mutate(campaign_day=21),
+          graph_altlambda_df %>% mutate(campaign_day=120)
+          )  %>%
+        # mutate(campaign_day=ifelse(adjustment=="Alternative",21,campaign_day))%>%
+        # mutate(new_strategy=paste(adjustment,campaign_day)) %>%
+        # mutate(campaign_day=glue::glue("{campaign_day} days post campaign start"))%>%
+        mutate(campaign_day=ifelse(campaign_day==21,
+                                   "Early serosurvey (21 days post campaign start)",
+                                   "Late serosurvey (120 days post campaign start)"
+                                   ))%>%
         mutate(new_coverage=factor(coverage,
                                    labels=c("0%",
                                             "25%",
@@ -1311,6 +1339,17 @@ lambda_df  %>%
                                             "75%"
                                             )
                                    )) %>%
+        mutate(new_adjustment=case_when(
+                adjustment=="Alternative" ~3,
+                adjustment=="Ignore" ~ 1,
+                adjustment=="Questionnaire" ~ 2
+        )) %>%
+        mutate(new_adjustment=factor(new_adjustment,
+                                     labels=c("No adjustment\nfor vaccination",
+                                              "Adjust estimates after\nknowing vaccination status",
+                                              "Predict with\nMixed-Cohort Model"
+                                              )
+                                     ))%>%
         # group_by(new_strategy,coverage)%>%
         # mutate(avg_lambda=mean(lambda)) %>%
         # ungroup()%>%
@@ -1319,19 +1358,20 @@ lambda_df  %>%
         # gather(type,value,-c(simulation,new_strategy, new_coverage, coverage))%>%
         ggplot()+
         geom_hline(yintercept=0.1,lty=2)+
-        geom_boxplot(aes(y=lambda,x=new_coverage,col=adjustment),fill=NA)+
+        geom_boxplot(aes(y=lambda*100,x=new_coverage,col=new_adjustment),fill=NA)+
         # geom_violin(aes(y=value,col=type,alpha=type),position="identity",fill="grey",
         #             trim=FALSE,scale="area")+
-        # scale_color_manual(values=c("blue",NA),na.value = NA)+
+        scale_color_brewer("Adjustment Method",palette = "Dark2")+
         # scale_alpha_manual(values=c(0,0.3))+
         # geom_point(aes(y=avg_lambda),col="blue")+
-        facet_wrap(fct_rev(campaign_day)~.)+
+        facet_wrap((campaign_day)~.)+
         cowplot::theme_cowplot()+
         # theme(axis.text.x = element_text(angle=45,hjust = 1),
         #       legend.position = "none"
         #       )+
-        ylab("200-day seroincidence")+
-        xlab("Vaccination Coverage")
+        ylab("200-day seroincidence\n(Infections per 100 population)")+
+        xlab("Vaccination Coverage")+
+        theme(legend.position = "bottom")
 
 
 
