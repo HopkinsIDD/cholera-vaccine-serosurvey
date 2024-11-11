@@ -32,7 +32,7 @@ rm(list=ls())
 source("code/R/packages.R")
 source("code/R/utils.R")
 
-# new_qc.R and load-data.R to see how final_df and final_wide are created
+# new_qc.R, clean-data.R load-data.R to see how final_df and final_wide are created
 
 final_df <- read_rds("data/generated_data/analysis_data/final_df.rds")
 final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
@@ -412,20 +412,23 @@ f2b <- mds_obj  %>%
         theme_cowplot()+
         theme(legend.position = "bottom")
 
+f2b+geom_point(data=centroids,
+                           col="black",aes(shape=status),size=2,
+               show.legend = FALSE)+
+                  scale_shape_manual("Cohort",values=c(2,1,17,1,19))
 
-
-plot_grid(f2b+
-                geom_point(data=centroids,
-                           col="black",aes(shape=status),size=2,show.legend = FALSE
-                                    )+
-                  scale_shape_manual("Cohort",values=c(2,1,17,1,19))+
-                  theme(legend.position = "none"),
-                get_legend(f2b),
-                f2a,
-          ncol=1,
-          labels=c("A","","B"),
-          rel_heights = c(0.9,0.1,1)
-          )
+# plot_grid(f2b+
+#                 geom_point(data=centroids,
+#                            col="black",aes(shape=status),size=2,show.legend = FALSE
+#                                     )+
+#                   scale_shape_manual("Cohort",values=c(2,1,17,1,19))+
+#                   theme(legend.position = "none"),
+#                 get_legend(f2b),
+#                 f2a,
+#           ncol=1,
+#           labels=c("A","","B"),
+#           rel_heights = c(0.9,0.1,1)
+#           )
 
 ```
 
@@ -1357,7 +1360,7 @@ bind_rows(lambda_df %>% filter(adjustment!="Alternative"),
         # left_join(sims_viz,by = c("simulation", "new_strategy", "new_coverage")) %>%
         # gather(type,value,-c(simulation,new_strategy, new_coverage, coverage))%>%
         ggplot()+
-        geom_hline(yintercept=0.1,lty=2)+
+        geom_hline(yintercept=10,lty=2)+
         geom_boxplot(aes(y=lambda*100,x=new_coverage,col=new_adjustment),fill=NA)+
         # geom_violin(aes(y=value,col=type,alpha=type),position="identity",fill="grey",
         #             trim=FALSE,scale="area")+
@@ -1642,22 +1645,45 @@ final_wide %>%
 ```{r}
 
 #keep
-raw_baseline_plot <- final_df %>%
+# raw_baseline_plot <- final_df %>%
+#         filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
+#         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")) %>%
+#         mutate(`Age Group`=ifelse(age>=10,"Adults","Children")) %>%
+#         mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+#         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))%>%
+#         mutate(pretty_cohort=ifelse(cohort=="SMIC/PIC",
+#                                     "BGD Case",cohort
+#                                     ))%>%
+#         ggplot(aes(y=RAU_value,col=pretty_cohort,group=pretty_cohort,x=`Age Group`))+
+#                 geom_boxplot()+
+#                 scale_y_continuous("Baseline log10(1/RAU)",breaks = c(0.25,1,4)) +
+#                 scale_color_brewer("Cohort",palette = "Set1")+
+#                 facet_grid(isotype~antigen_pretty)+
+#                 theme_bw()+
+#                 theme(legend.position="bottom"
+#                       )
+
+
+raw_baseline_plot<- final_df %>%
         filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")) %>%
-        mutate(`Age Group`=ifelse(age>=10,"Adults","Children")) %>%
-        mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+        mutate(`Age Group`=ifelse(age<10,"<10 years old",">= 10 years old")) %>%
+        # mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))%>%
         mutate(pretty_cohort=ifelse(cohort=="SMIC/PIC",
                                     "BGD Case",cohort
                                     ))%>%
-        ggplot(aes(y=RAU_value,col=pretty_cohort,x=`Age Group`))+
-                geom_boxplot()+
-                scale_y_continuous("Baseline log10(1/RAU)",breaks = c(0.25,1,4)) +
+        filter(isotype=="IgG")%>%
+        ggplot(aes(y=RAU_value,col=pretty_cohort,group=pretty_cohort,x=pretty_cohort))+
+                # geom_boxplot()+
+                ggbeeswarm::geom_beeswarm()+
+                scale_y_continuous("Baseline IgG log10(1/RAU)",breaks = c(0.25,1,4)) +
+                xlab("Cohort")+
                 scale_color_brewer("Cohort",palette = "Set1")+
-                facet_grid(isotype~antigen_pretty)+
+                facet_grid(`Age Group`~antigen_pretty)+
                 theme_bw()+
-                theme(legend.position="bottom"
+                theme(legend.position="bottom",
+                      axis.text.x = element_text(angle=45,hjust=1)
                       )
 
 
@@ -1672,7 +1698,7 @@ GMT_ratio_plot <- bootDF %>%
         summarize(mean=mean(RAU_ratio),
                   lb=quantile(RAU_ratio,0.025),
                   ub=quantile(RAU_ratio,0.975)) %>%
-        mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+        # mutate(`Age Group`=factor(`Age Group`,levels=c("<10 years old",">= 10 years old"))) %>%
         ggplot(aes(x=`Age Group`, col=isotype,y=mean))+
                 geom_point(position = position_dodge(0.5))+
                 geom_linerange(aes(ymin=lb,ymax=ub),
@@ -1709,7 +1735,7 @@ baseline_sero_data <- final_df %>%
         filter((status=="Vaccinee" & day %in% c(0,3))|(status=="Case" & day==2)) %>%
         group_by(id) %>%
         filter(day ==min(day)) %>%
-        filter(!id %in% c("IMS_A018","IMS_B021")) %>%
+        # filter(!id %in% c("IMS_A018","IMS_B021")) %>%
         select(id,status,cohort,antigen_pretty,isotype,baseline=RAU_value)
                        
 
@@ -1719,8 +1745,21 @@ peak_sero_data <- final_df %>%
         group_by(id,antigen_pretty,isotype) %>%
         slice_max(order_by=RAU_value,n=1,with_ties = FALSE) %>%
         ungroup()%>%
-        filter(!id %in% c("IMS_A018","IMS_B021"))%>%
-        select(id,status,cohort,antigen_pretty,isotype,peak=RAU_value)
+        # filter(!id %in% c("IMS_A018","IMS_B021"))%>%
+        select(id,status,cohort,antigen_pretty,isotype,peak=RAU_value,day)
+
+peak_sero_data %>%
+        filter(antigen_pretty=="Ogawa OSP") %>%
+        group_by(cohort,isotype) %>%
+        mutate(lb=quantile(day,0.25),
+                  ub=quantile(day,0.75)
+                  ) %>%
+        group_by(cohort,isotype,lb,ub) %>%
+        summarise(n=n(),
+                  peaked=sum(day>=lb&day<=ub)
+                  )%>%
+        mutate(peaked/n) %>%
+        arrange(isotype)
 
 
 baseline_sero_data %>%
@@ -1731,9 +1770,28 @@ baseline_sero_data %>%
         mutate(diff=peak-baseline) %>% 
         filter(!is.na(diff))%>%
         mutate(cohort=ifelse(cohort=="SMIC/PIC","BGD Case",cohort))%>%
-        group_by(antigen_pretty,isotype,cohort) %>%
+        group_by(antigen_pretty,isotype,status) %>%
         summarize(gmt=round(10^mean(diff),1)) %>% 
-        ungroup() %>% spread(cohort,gmt)%>%
+        ungroup() %>% spread(status,gmt)%>%
+        rename(Antigen=antigen_pretty,
+               Isotype=isotype
+               )%>%
+        arrange(Antigen,Isotype)%>%
+        flextable::flextable() %>%
+        flextable::autofit()
+
+
+baseline_sero_data %>%
+        filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
+                                     "O139 OSP", "TcpA"
+                                     ))%>%
+        left_join(peak_sero_data) %>%
+        mutate(diff=peak-baseline) %>% 
+        filter(!is.na(diff))%>%
+        mutate(cohort=ifelse(cohort=="SMIC/PIC","BGD Case",cohort))%>%
+        group_by(antigen_pretty,isotype,status) %>%
+        summarize(pct=paste0(100*round(mean(10^(diff)>=2),2),"%")) %>% 
+        ungroup() %>% spread(status,pct)%>%
         rename(Antigen=antigen_pretty,
                Isotype=isotype
                )%>%
