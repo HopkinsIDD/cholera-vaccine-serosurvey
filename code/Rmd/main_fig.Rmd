@@ -412,23 +412,21 @@ f2b <- mds_obj  %>%
         theme_cowplot()+
         theme(legend.position = "bottom")
 
-f2b+geom_point(data=centroids,
-                           col="black",aes(shape=status),size=2,
-               show.legend = FALSE)+
-                  scale_shape_manual("Cohort",values=c(2,1,17,1,19))
 
-# plot_grid(f2b+
-#                 geom_point(data=centroids,
-#                            col="black",aes(shape=status),size=2,show.legend = FALSE
-#                                     )+
-#                   scale_shape_manual("Cohort",values=c(2,1,17,1,19))+
-#                   theme(legend.position = "none"),
-#                 get_legend(f2b),
-#                 f2a,
-#           ncol=1,
-#           labels=c("A","","B"),
-#           rel_heights = c(0.9,0.1,1)
-#           )
+
+plot_grid(f2b+
+                geom_point(data=centroids,
+                           col="black",aes(shape=status),size=2,show.legend = FALSE
+                                    )+
+                  scale_shape_manual("Cohort",values=c(2,1,17,1,19))+
+                  theme(legend.position = "none"),
+                get_legend(f2b),
+                # f2a,
+          ncol=1,
+          # labels=c("A","","B"),
+        rel_heights = c(0.9,0.1)
+          # rel_heights = c(0.9,0.1,1)
+          )
 
 ```
 
