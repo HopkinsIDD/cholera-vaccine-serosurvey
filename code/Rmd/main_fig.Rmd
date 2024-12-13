@@ -63,6 +63,18 @@ read_rds("data/generated_data/quality_control/complete_raw_data.rds") %>%
         mutate(percent=100*n/sum(n))
 
 
+read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample inventory.xls") %>% View()
+
+read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample inventory.xls") %>% 
+    select(id=`RIK ID No.`,starts_with("Date of Day"))%>%
+    gather(day,date,-id) %>%
+        filter(!is.na(date))%>%
+        count(id) %>%
+        summarise(sum(n>=3),
+                  mean(n>=3)
+                  )
+
+        
 ```
 
 
@@ -1285,7 +1297,7 @@ lambda_df  %>%
                                    )
         )) %>%
         group_by(new_coverage) %>%
-        summarize(lambda=glue::glue("{round(mean(lambda),2)} {round(min(lambda),2)}-{round(max(lambda),2)}")
+        summarize(lambda=glue::glue("{round(mean(lambda),3)} {round(min(lambda),3)}-{round(max(lambda),3)}")
         )
 
 
