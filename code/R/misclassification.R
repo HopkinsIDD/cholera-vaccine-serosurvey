@@ -13,8 +13,11 @@ library(tidybayes)
 
 
 var_list <- list(
-        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
-        `Reduced IgG Panel (NO AGE)` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA")
+        # `Reduced IgG Panel and Age` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA"),
+        `All Variables`= data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist()  %>% unname()
 )
 
 
@@ -180,8 +183,10 @@ raw_df_list <- list(
         #         filter(variables=="Reduced IgG Panel") ,
         `All Vaccinees (Reduced IgG Panel)` = filter(raw_df, cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
                 filter(variables=="Reduced IgG Panel"),
-        `All Vaccinees (Reduced IgG Panel [NO AGE])` = filter(raw_df, cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
-                filter(variables=="Reduced IgG Panel (NO AGE)")
+        `All Vaccinees (All Variables)` = filter(raw_df, cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
+                filter(variables=="All Variables")
+        # `All Vaccinees (Reduced IgG Panel [NO AGE])` = filter(raw_df, cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
+        #         filter(variables=="Reduced IgG Panel (NO AGE)")
         
 )
 

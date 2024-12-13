@@ -281,26 +281,16 @@ source("code/R/misclassification.R")
 
 ```
 
-```{r mds-code, eval=FALSE}
-
-# multidimensional-scaling provides object with mds analysis
-source("code/R/multidimensional-scaling.R")
-
-```
-
-```{r misclassify-mds-figure, eval=TRUE,fig.width=9.1,fig.height=7}
+```{r misclassify-figure, eval=TRUE,fig.width=9.1,fig.height=7}
 
 
 
 #get data for misclassification
 misclassify_df <- read_rds("data/generated_data/analysis_objects/misclassification/misclassify_df.rds")
 tvfpr_df <- read_rds("data/generated_data/analysis_objects/misclassification/tvfpr_df.rds")
-#get mds measurements
-mds_obj <- read_rds("data/generated_data/analysis_objects/mds/mds_obj.rds")
-permuted_distances <- read_rds("data/generated_data/analysis_objects/mds/permuted_distances.rds")
 
 
-misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
+misclassify_df%>% filter(variables=="Reduced IgG Panel")%>%
         filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
         filter(end_window %in% c("45"))%>%
         group_by(day,end_window,cohort) %>%
@@ -311,20 +301,20 @@ misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
         arrange(cohort)
 
 
-filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
+filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)") %>%
         filter(end_window %in% c(120,200,300)) %>%
         group_by(end_window) %>%
         filter(median==max(median))
 
 
 
-filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
+filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)") %>%
         filter(end_window %in% c(120,200,300)) %>%
         group_by(end_window) %>%
         filter(median>=0.05) %>%
         filter(time==min(time))
 
-filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
+filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)") %>%
         filter(end_window %in% c(120,200,300)) %>%
         group_by(end_window) %>%
         filter(median>=0.05) %>%
@@ -338,7 +328,7 @@ filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])") %>%
 #         slice_min(abs(median-0.05),n=1)
 
 
-misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
+misclassify_df%>% filter(variables=="Reduced IgG Panel")%>%
         filter(cohort %in% c("ETEC Challenge"))%>%
         filter(end_window %in% c("200"))%>%
         group_by(day,end_window,cohort) %>%
@@ -347,22 +337,9 @@ misclassify_df%>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
                   )%>%
         mutate(per_pos=seropos/n) 
 
-mds_obj %>%
-        group_by(time_window,status) %>%
-        summarise(avg_D1=mean(D1),
-                  avg_D2=mean(D2)
-                  ) %>%
-        gather(dimension,value,-c(time_window,status)) %>%
-        spread(status,value) %>%
-        mutate(distance=(Case-Vaccinee)^2) %>%
-        group_by(time_window) %>%
-        summarise(euclidean=sqrt(sum(distance)))
 
-permuted_distances %>%
-        group_by(time_window) %>%
-        summarize(quantile(euclidean,0.999))
 
-f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
+f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
         filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
         group_by(day,end_window,cohort) %>%
         summarize(seropos=mean(spec95_seropos))%>%
@@ -377,12 +354,12 @@ f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
         ggplot()+
         geom_point(aes(col=Vaccinee,
                    y=seropos,x=day,shape=Vaccinee))+
-        geom_line(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])")%>%
+        geom_line(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)")%>%
                         mutate(end_window=factor(end_window,
                                  levels=c("45","120","200","300"),
                                  labels=c("45-day","120-day","200-day","300-day"))),
                         aes(x=time,y=median))+
-        geom_ribbon(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel [NO AGE])")%>%
+        geom_ribbon(data=filter(tvfpr_df,population== "All Vaccinees (Reduced IgG Panel)")%>%
                         mutate(end_window=factor(end_window,
                                  levels=c("45","120","200","300"),
                                  labels=c("45-day","120-day","200-day","300-day"))),
@@ -399,46 +376,10 @@ f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel (NO AGE)")%>%
         theme(legend.position = "bottom")
         
         
-
-
-centroids <- mds_obj %>%
-                        group_by(time_window,status) %>%
-                        summarize(D1=mean(D1),
-                                  D2=mean(D2)
-                                  )
-
-f2b <- mds_obj  %>%
-        mutate(cohort=case_when(
-                        cohort=="BGD Vaccinee" ~ "Bangladeshi Vaccinees",
-                        cohort=="HTI Vaccinee" ~ "Haitian Vaccinees",
-                        cohort=="SMIC/PIC" ~ "Bangladeshi Cases",
-
-        ))%>%
-                ggplot(aes(x=D1,y=D2,col=cohort)) +
-                geom_point(aes(shape=cohort))+
-                scale_color_manual("Cohort", values=c("red","#003262","#FDB515"))+
-                scale_shape_manual("Cohort",values=c(2,1,1))+
-                xlab("Dimension 1")+
-                ylab("Dimension 2")+
-        facet_wrap(.~time_window,scales="free")+
-        theme_cowplot()+
-        theme(legend.position = "bottom")
+f2a
 
 
 
-plot_grid(f2b+
-                geom_point(data=centroids,
-                           col="black",aes(shape=status),size=2,show.legend = FALSE
-                                    )+
-                  scale_shape_manual("Cohort",values=c(2,1,17,1,19))+
-                  theme(legend.position = "none"),
-                get_legend(f2b),
-                # f2a,
-          ncol=1,
-          # labels=c("A","","B"),
-        rel_heights = c(0.9,0.1)
-          # rel_heights = c(0.9,0.1,1)
-          )
 
 ```
 
@@ -810,7 +751,7 @@ tvfpr_fit <- read_rds(
           paste0("data/generated_data/analysis_objects/misclassification/","tvfpr_fit.rds")
 )
 
-tvfpr_fit_200 <- tvfpr_fit$`200`$`All Vaccinees (Reduced IgG Panel [NO AGE])`
+tvfpr_fit_200 <- tvfpr_fit$`200`$`All Vaccinees (Reduced IgG Panel)`
 
 #load the new model objects
 
@@ -839,7 +780,7 @@ p1 <- loocv_tvfit_df %>%
                 geom_line(data=tvfpr_df %>%
                                   filter(end_window==200)%>%
                                   filter(time<=200)%>%
-                                  filter(population=="All Vaccinees (Reduced IgG Panel [NO AGE])"),
+                                  filter(population=="All Vaccinees (Reduced IgG Panel)"),
                           col="black",aes(x=time,y=median),lwd=1,
                           inherit.aes = FALSE
                           )+
@@ -1809,6 +1750,352 @@ baseline_sero_data %>%
         flextable::flextable() %>%
         flextable::autofit()
 ```
+
+## Misclassification with more markers
+
+```{r}
+
+
+misclassify_df <- read_rds("data/generated_data/analysis_objects/misclassification/misclassify_df.rds")
+tvfpr_df <- read_rds("data/generated_data/analysis_objects/misclassification/tvfpr_df.rds")
+
+
+misclassify_df%>% filter(variables=="All Variables")%>%
+        filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
+        filter(end_window %in% c("45"))%>%
+        group_by(day,end_window,cohort) %>%
+        summarize(seropos=sum(spec95_seropos),
+                  n=n(),
+                  )%>%
+        mutate(per_pos=seropos/n) %>% 
+        arrange(cohort)
+
+
+filter(tvfpr_df,population== "All Vaccinees (All Variables)") %>%
+        filter(end_window %in% c(120,200,300)) %>%
+        group_by(end_window) %>%
+        filter(median==max(median))
+
+
+
+filter(tvfpr_df,population== "All Vaccinees (All Variables)") %>%
+        filter(end_window %in% c(120,200,300)) %>%
+        group_by(end_window) %>%
+        filter(median>=0.05) %>%
+        filter(time==min(time))
+
+filter(tvfpr_df,population== "All Vaccinees (All Variables)") %>%
+        filter(end_window %in% c(120,200,300)) %>%
+        group_by(end_window) %>%
+        filter(median>=0.05) %>%
+        filter(time==max(time))
+
+
+# filter(tvfpr_df,population== "All Vaccinees (All Variables [NO AGE])") %>%
+#         filter(end_window %in% c(120,200,300)) %>%
+#         filter(time>14)%>%
+#         group_by(end_window) %>%
+#         slice_min(abs(median-0.05),n=1)
+
+
+misclassify_df%>% filter(variables=="All Variables")%>%
+        filter(cohort %in% c("ETEC Challenge"))%>%
+        filter(end_window %in% c("200"))%>%
+        group_by(day,end_window,cohort) %>%
+        summarize(seropos=sum(spec95_seropos),
+                  n=n(),
+                  )%>%
+        mutate(per_pos=seropos/n) 
+
+
+
+misclassify_df %>% filter(variables=="All Variables")%>%
+        filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
+        group_by(day,end_window,cohort) %>%
+        summarize(seropos=mean(spec95_seropos))%>%
+        filter(end_window %in% c("45","120","200","300"))%>%
+        mutate(end_window=factor(end_window,
+                        levels=c("45","120","200","300"),
+                        labels=c("45-day","120-day","200-day","300-day")))%>%
+        mutate(Vaccinee=case_when(
+                        cohort=="BGD Vaccinee" ~ "Bangladeshi",
+                        cohort=="HTI Vaccinee" ~ "Haitian"
+        )) %>%
+        ggplot()+
+        geom_point(aes(col=Vaccinee,
+                   y=seropos,x=day,shape=Vaccinee))+
+        geom_line(data=filter(tvfpr_df,population== "All Vaccinees (All Variables)")%>%
+                        mutate(end_window=factor(end_window,
+                                 levels=c("45","120","200","300"),
+                                 labels=c("45-day","120-day","200-day","300-day"))),
+                        aes(x=time,y=median))+
+        geom_ribbon(data=filter(tvfpr_df,population== "All Vaccinees (All Variables)")%>%
+                        mutate(end_window=factor(end_window,
+                                 levels=c("45","120","200","300"),
+                                 labels=c("45-day","120-day","200-day","300-day"))),
+                        aes(x=time,ymin=lb,ymax=ub),col=NA,
+                                    alpha=0.2,
+                        )+
+        facet_grid(.~end_window)+
+        theme_cowplot()+
+        scale_x_continuous("Days since first dose",breaks=seq(0,365,90))+
+        scale_y_continuous("Proportion Seropositive")+
+        scale_color_manual(values = c("#003262","#FDB515"))+
+        scale_shape_manual(values=c(1,1))+
+        geom_hline(yintercept = 0.05,lty=2)+
+        theme(legend.position = "bottom")
+        
+        
+
+
+
+```
+
+
+
+## MDS Analysis
+
+```{r mds-code, eval=FALSE}
+
+# multidimensional-scaling provides object with mds analysis
+source("code/R/multidimensional-scaling.R")
+
+```
+
+```{r}
+#get mds measurements
+mds_obj <- read_rds("data/generated_data/analysis_objects/mds/mds_obj.rds")
+permuted_distances <- read_rds("data/generated_data/analysis_objects/mds/permuted_distances.rds")
+
+mds_obj %>%
+        group_by(time_window,status) %>%
+        summarise(avg_D1=mean(D1),
+                  avg_D2=mean(D2)
+                  ) %>%
+        gather(dimension,value,-c(time_window,status)) %>%
+        spread(status,value) %>%
+        mutate(distance=(Case-Vaccinee)^2) %>%
+        group_by(time_window) %>%
+        summarise(euclidean=sqrt(sum(distance)))
+
+permuted_distances %>%
+        group_by(time_window) %>%
+        summarize(quantile(euclidean,0.999))
+centroids <- mds_obj %>%
+                        group_by(time_window,status) %>%
+                        summarize(D1=mean(D1),
+                                  D2=mean(D2)
+                                  )
+
+mds_obj  %>%
+        mutate(cohort=case_when(
+                        cohort=="BGD Vaccinee" ~ "Bangladeshi Vaccinees",
+                        cohort=="HTI Vaccinee" ~ "Haitian Vaccinees",
+                        cohort=="SMIC/PIC" ~ "Bangladeshi Cases",
+
+        ))%>%
+                ggplot(aes(x=D1,y=D2,col=cohort)) +
+                geom_point(aes(shape=cohort))+
+                scale_color_manual("Cohort", values=c("red","#003262","#FDB515"))+
+                scale_shape_manual("Cohort",values=c(2,1,1))+
+                xlab("Dimension 1")+
+                ylab("Dimension 2")+
+        facet_wrap(.~time_window,scales="free")+
+        theme_cowplot()+
+        theme(legend.position = "bottom")
+
+```
+
+
+### Performance analysis all variables
+
+
+```{r }
+
+#load the original model objects
+tvfpr_df <- read_rds("data/generated_data/analysis_objects/misclassification/tvfpr_df.rds")
+tvfpr_fit <- read_rds(
+          paste0("data/generated_data/analysis_objects/misclassification/","tvfpr_fit.rds")
+)
+
+tvfpr_fit_200 <- tvfpr_fit$`200`$`All Vaccinees (All Variables)`
+
+#load the new model objects
+
+loocv_tvfit_df <- read_rds(
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_df_new.rds")
+)
+
+loocv_tvfit_list <- read_rds(
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_list_new.rds")
+)
+
+loocv_spec_df<- read_rds(
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_df_new.rds")
+)
+
+loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_new.rds")
+
+
+p1 <- loocv_tvfit_df %>%
+        filter(time<=200)%>%
+        filter(population=="Vaccinee")%>%
+        filter(str_detect(variables,"all"))%>%
+        ggplot(aes(col=variables,fill=variables))+
+                geom_line(aes(x=time,y=median))+
+                geom_ribbon(aes(x=time,ymin=lb,ymax=ub),alpha=0.5,col=NA)+
+                geom_line(data=tvfpr_df %>%
+                                  filter(end_window==200)%>%
+                                  filter(time<=200)%>%
+                                  filter(population=="All Vaccinees (All Variables)"),
+                          col="black",aes(x=time,y=median),lwd=1,
+                          inherit.aes = FALSE
+                          )+
+        scale_color_manual(values = c("red","blue"))+
+        scale_fill_manual(values = c("red","blue"))+
+        xlab("Days since vaccination")+
+        scale_y_continuous("False Positive Rate",limits = c(0,0.25))+
+        geom_hline(yintercept = 0.05,lty=2,col="grey")+
+        theme_cowplot()+
+        theme(legend.position = "none")
+
+
+p2_vax_df <- bind_rows(
+        
+        tvfpr_fit_200$out_df %>%
+        filter(time<=200) %>% group_by(.draw)%>%
+        summarize(avg=mean(theta)) %>%
+        ungroup()%>%
+        summarize(median=median(avg),
+                  lb=quantile(avg,0.025),
+                  ub=quantile(avg,0.975)
+                  )%>%
+        mutate(variables="original"),
+
+
+        loocv_tvfit_list$all_2class$all_fitdata$`200-day`$Vaccinee$out_df %>%
+        filter(time<=200) %>% group_by(.draw)%>%
+        summarize(avg=mean(theta)) %>%
+        ungroup()%>%
+        summarize(median=median(avg),
+                  lb=quantile(avg,0.025),
+                  ub=quantile(avg,0.975)
+                  )%>%
+        mutate(variables="all_2class"),
+
+
+        loocv_tvfit_list$all_3class$all_fitdata$`200-day`$Vaccinee$out_df %>%
+        filter(time<=200)%>% group_by(.draw)%>%
+        summarize(avg=mean(theta)) %>%
+        ungroup()%>%
+        summarize(median=median(avg),
+                  lb=quantile(avg,0.025),
+                  ub=quantile(avg,0.975)
+                  ) %>%
+                mutate(variables="all_3class")
+) %>% mutate(population="Vaccinated")  
+
+p2_outside_df <- loocv_spec_df %>% 
+                        filter(str_detect(variables,"all")) %>%
+                        filter(population=="Outside Window") %>%
+                        mutate(variables=ifelse(base_data_name=="case_fitdata",
+                                                "original",variables
+                                                )) %>%
+                        mutate(median=1-median,
+                               lb_new=1-ub,
+                               ub=1-lb
+                               )%>%
+                        select(median,lb=lb_new,ub,variables,population)%>%
+                        mutate(population="Unvaccinated")
+
+p2<- bind_rows(p2_outside_df,p2_vax_df)%>%
+        mutate(Model=factor(variables,
+                            levels=c("original","all_2class","all_3class"),
+                            labels=c("Case-only model",
+                                     "Mixed-cohort model",
+                                     "Mixed-cohort 3-class model"
+                                     )
+                            )) %>%
+        mutate(population=factor(population))%>%
+        mutate(population=fct_rev(population))%>%
+        ggplot()+
+                geom_point(aes(x=population,y=median,col=Model),
+                           position = position_dodge(0.5)
+                           )+
+                geom_linerange(aes(x=population,ymin=lb,ymax=ub,col=Model),
+                           position = position_dodge(0.5)
+                           )+
+        theme_cowplot()+
+        geom_hline(yintercept = 0.05,lty=2,col="grey")+
+        scale_color_manual(values = c("black","red","blue"))+
+        scale_y_continuous("False Positive Rate",limits = c(0,0.25))+
+        xlab("Population")
+
+p3_df <- loocv_tvfit_df %>%
+        filter(population=="Case")%>%
+        filter(str_detect(variables,"all"))%>%
+                        mutate(variables=ifelse(base_data_name=="case_fitdata",
+                                                "original",variables
+                                                )) %>%
+        filter(time<=200)
+
+
+
+
+p3 <- p3_df%>%
+        filter(str_detect(variables,"all"))%>%
+        ggplot(aes(col=variables,fill=variables))+
+                geom_line(aes(x=time,y=median))+
+                geom_ribbon(aes(x=time,ymin=lb,ymax=ub),alpha=0.5,col=NA)+
+        geom_line(data=p3_df %>%
+                          filter(variables=="original"),
+                  col="black",aes(x=time,y=median), lwd=1,
+                  inherit.aes = FALSE
+                  )+
+        scale_color_manual(values = c("red","blue"))+
+        scale_fill_manual(values = c("red","blue"))+
+        xlab("Days since infection")+
+        scale_y_continuous("Sensitivity",limits=c(0,1))+
+        theme_cowplot()+
+        theme(legend.position = "none")
+
+p4 <- loocv_df %>%
+        filter(variables=="all_3class") %>%
+        mutate(across(Neither:RecentlyVaccinated,.fns = ~ifelse(is.na(.x),
+                                                                0,.x
+                                                                ))) %>%
+        mutate(prediction=case_when(
+                Neither >= RecentlyInfected & Neither >=RecentlyVaccinated ~"Neither",
+                RecentlyInfected > Neither & RecentlyInfected >= RecentlyVaccinated ~"RecentlyInfected",
+                RecentlyVaccinated > Neither & RecentlyVaccinated > RecentlyInfected ~"RecentlyVaccinated"
+        )) %>%
+        mutate(three_class=factor(three_class),
+                  prediction=factor(prediction)
+        ) %>%
+        count(variables,three_class,prediction,.drop=FALSE) %>%
+        group_by(variables,three_class) %>%
+        mutate(proportion=n/sum(n)) %>%
+        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+        ggplot(aes(x=three_class,y=prediction))+
+        geom_tile(aes(fill=100*proportion))+
+        geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
+        scale_fill_distiller("Percent\nClassified",palette = "Blues",
+                             direction = 1,limits=c(0,100),
+        )+
+        xlab("True Class")+
+        ylab("Predicted Class")+
+        theme_cowplot()
+
+
+plot_grid(
+        plot_grid(p1,p2,nrow=1,rel_widths = c(1,1), labels=c("A","B")),
+        plot_grid(p3,p4,nrow = 1,rel_widths = c(1,1), labels=c("C","D")),
+        nrow=2
+        )
+```
+
 
 
 ## ROC comparison
