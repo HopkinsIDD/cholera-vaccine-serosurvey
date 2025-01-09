@@ -1,4 +1,10 @@
 
+
+####Note that the file simulation.R has been updated
+
+
+
+
 # 2. Get alternative model characteristics -----------
 
 #### Sensitivity

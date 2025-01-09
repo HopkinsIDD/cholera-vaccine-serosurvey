@@ -393,7 +393,7 @@ sims_alternative <- list()
 
 lambda_df <- data.frame()
 
-simulations <- 100
+simulations <- 10
 n_survey <- 1000
 coverage_values <- c(0, 0.25, 0.5, 0.75)
 
@@ -538,7 +538,7 @@ for(cov in coverage_values){
                         ### Strategy 3: Alternative model
                         # run the rapid vax coverage survey
                         rapid_cov <- rbinom(1,500,cov)/500
-                        
+
                         #calculate the beta distribution for specificity distribution
                         alternative_spec_beta <- bind_cols(
                                 alternative_vax_beta_draws %>%
