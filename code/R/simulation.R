@@ -130,15 +130,15 @@ original_spec_beta <- MASS::fitdistr(original_spec_dist$spec,
 #load stan fit
 original_tvfpr_fit <- read_rds("data/generated_data/analysis_objects/misclassification/tvfpr_fit.rds")
 
-original_vax_fitdata <-original_tvfpr_fit$`200`$`All Vaccinees (Reduced IgG Panel [NO AGE])`$data
-original_vax_spread <- original_tvfpr_fit$`200`$`All Vaccinees (Reduced IgG Panel [NO AGE])`$fit%>% 
+original_vax_fitdata <-original_tvfpr_fit$`200`$`All Vaccinees (Reduced IgG Panel)`$data
+original_vax_spread <- original_tvfpr_fit$`200`$`All Vaccinees (Reduced IgG Panel)`$fit%>% 
         spread_draws(`(Intercept)`,
                      b[term,group],
                      day1,day2,day3
         )
 
 #for loop through potential campaign timings
-campaign_timepoints <- c(21,45,90,120,180)
+campaign_timepoints <- c(21,120)#c(21,45,90,120,180)
 
 original_vax_tv_obj <- data.frame()
 original_vax_beta_draws <- data.frame()
