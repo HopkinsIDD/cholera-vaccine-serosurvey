@@ -196,7 +196,7 @@ lambda_df <- data.frame()
 
 simulations <- 100
 n_survey <- 1000
-coverage_values <- c(0, 0.25, 0.5, 0.75)
+coverage_values <- c(0,0.75)#c(0, 0.25, 0.5, 0.75)
 
 
 stan_model_compiled <- stan_model("code/stan/vax-model-simplified.stan")
