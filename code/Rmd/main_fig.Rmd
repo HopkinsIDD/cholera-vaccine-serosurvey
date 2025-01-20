@@ -45,7 +45,7 @@ final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
 
 ### Abstract
 
-```{r}
+```{r abstract}
 
 final_wide %>%
         filter(studycode!="E01JH") %>%
@@ -53,34 +53,11 @@ final_wide %>%
 
 ```
 
-### Methods
+### Results
 
+#### Study Population
 
-```{r}
-read_rds("data/generated_data/quality_control/complete_raw_data.rds") %>%
-        filter(subclass=="total")%>%
-        count(Count<30) %>%
-        mutate(percent=100*n/sum(n))
-
-
-read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample inventory.xls") %>% View()
-
-read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample inventory.xls") %>% 
-    select(id=`RIK ID No.`,starts_with("Date of Day"))%>%
-    gather(day,date,-id) %>%
-        filter(!is.na(date))%>%
-        count(id) %>%
-        summarise(sum(n>=3),
-                  mean(n>=3)
-                  )
-
-        
-```
-
-
-### Study Population
-
-```{r}
+```{r study-pop1}
 final_wide %>%
         filter(cohort %in% c("BGD Vaccinee","HTI Vaccinee")) %>%
         group_by(cohort)%>%
@@ -119,7 +96,7 @@ final_wide %>%
 ```
 
 
-```{r}
+```{r study-pop2}
 
 final_wide %>%
         filter(cohort=="BGD Vaccinee") %>%
@@ -139,16 +116,14 @@ final_wide %>%
         summary()
 ```
 
-### Antibody kinetics of vaccinated volunteers and confirmed cholera cases
+#### Antibody kinetics of vaccinated volunteers and confirmed cholera cases
 
+__Table 1:Individual characteristics of culture confirmed cholera patients and vaccinated individuals__
 
-
-
-### Table 1:Individual characteristics of culture confirmed cholera patients and vaccinated individuals
 Serological data were also available for three uninfected household contacts of Bangladeshi cases enrolled with measurements taken at 2, 7, and 30 days after enrollment of the initial case
 
 
-```{r eval=TRUE}
+```{r table-1, eval=TRUE}
 
 
 tab1_df <- final_df %>%
@@ -206,7 +181,7 @@ tab1_df %>%
 
 \pagebreak
 
-### Figure 1: Multiplex bead assay measurements of IgG, IgM, and IgA against V. cholerae O1 antigens among vaccinated participants 
+__Figure 1: Multiplex bead assay measurements of IgG, IgM, and IgA against V. cholerae O1 antigens among vaccinated participants__
 
 Y-axis indicates the log (base 10) of the relative antibody units (RAU) with limits at 10^-2 and 10-5. X-axis is in days and is square-root transformed. Each colored line indicates individual trajectories over time. The solid lines are Loess smooth functions. Rug plots show measurements from confirmed cases and uninfected household contacts classified within a 180-day infection window (black) and outside a 180-day infection window (purple).
 
@@ -384,7 +359,7 @@ f2a
 ```
 
 
-### Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days). 
+__Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days).__
 
 ```{r loocv-code, eval=FALSE}
 
@@ -1544,6 +1519,29 @@ loocv_3class_df %>%
 #         
 # )
 
+```
+
+### Methods
+
+```{r}
+read_rds("data/generated_data/quality_control/complete_raw_data.rds") %>%
+        filter(subclass=="total")%>%
+        count(Count<30) %>%
+        mutate(percent=100*n/sum(n))
+
+
+read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample inventory.xls") %>% View()
+
+read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample inventory.xls") %>% 
+    select(id=`RIK ID No.`,starts_with("Date of Day"))%>%
+    gather(day,date,-id) %>%
+        filter(!is.na(date))%>%
+        count(id) %>%
+        summarise(sum(n>=3),
+                  mean(n>=3)
+                  )
+
+        
 ```
 
 ## Supplement
