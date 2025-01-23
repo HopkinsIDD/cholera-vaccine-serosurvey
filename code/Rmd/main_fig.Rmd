@@ -55,8 +55,6 @@ final_wide %>%
 
 ### Results
 
-#### Study Population
-
 ```{r study-pop1}
 final_wide %>%
         filter(cohort %in% c("BGD Vaccinee","HTI Vaccinee")) %>%
@@ -88,7 +86,7 @@ final_wide %>%
                )
 
 final_wide %>%
-        filter(status=="Contact"|cohort=="ETEC Challenge") %>%
+        filter(status=="Contact") %>%
         group_by(cohort)%>%
         summarize(samples=n(),
                   individuals=length(unique(id)))
@@ -114,9 +112,13 @@ final_wide %>%
         filter(status=="Case")%>%
         count(id) %>% 
         summary()
-```
 
-#### Antibody kinetics of vaccinated volunteers and confirmed cholera cases
+final_wide %>%
+        filter(cohort %in% c("SMIC/PIC")) %>%
+        filter(status=="Contact")%>%
+        count(day) %>% 
+        summary()
+```
 
 __Table 1:Individual characteristics of culture confirmed cholera patients and vaccinated individuals__
 
@@ -181,9 +183,11 @@ tab1_df %>%
 
 \pagebreak
 
-__Figure 1: Multiplex bead assay measurements of IgG, IgM, and IgA against V. cholerae O1 antigens among vaccinated participants__
+#### Immune response to vaccination and infection differ in magnitude and breadth
 
-Y-axis indicates the log (base 10) of the relative antibody units (RAU) with limits at 10^-2 and 10-5. X-axis is in days and is square-root transformed. Each colored line indicates individual trajectories over time. The solid lines are Loess smooth functions. Rug plots show measurements from confirmed cases and uninfected household contacts classified within a 180-day infection window (black) and outside a 180-day infection window (purple).
+__Figure 1:  Multiplex bead assay measurements of IgG, IgM, and IgA against OSP, CT-B, and TcpA antigens among vaccinated volunteers__
+
+
 
 ```{r f1-spaghetti-rau,  eval=TRUE, fig.height = 7, fig.width = 10}
 
@@ -245,9 +249,9 @@ fig1_df %>%
 \pagebreak
 
 
-### Figure 2: Misclassification of vaccinated individuals
+#### Previous seroincidence models frequently misclassify vaccination as recent infection
 
-The proportion of Bangladeshi vaccinees predicted to be cases (using the a previously published random forest model trained on anti-CT-B, anti-Ogawa OSP, anti-Inaba OSP IgG measurements) at each time point is shown (A). The two dimensions calculated from the multidimensional scaling analyses are shown in each scatterplot for each denoted time window (B). Both Haitian and Bangladeshi vaccinees were included.
+__Figure 2:  Misclassification of vaccinees as seropositive by previous seroincidence models using 45, 120, 200, and 300 day infection windows__
 
 ```{r misclassification-code, eval=FALSE}
 
@@ -350,9 +354,26 @@ f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
         geom_hline(yintercept = 0.05,lty=2)+
         theme(legend.position = "bottom")
         
-        
-f2a
+      
 
+nmfp_label_df <- data.frame(
+                end_window="45",
+                X=270,
+                Y=0.15
+) %>% mutate(end_window=factor(end_window,
+                                 levels=c("45","120","200","300"),
+                                 labels=c("45-day","120-day","200-day","300-day")))
+  
+f2a + geom_text(data=nmfp_label_df,
+                label="Nominal false\npositivity rate",
+                aes(x=X,y=Y),fontface="bold"
+                )+
+  geom_segment(data=nmfp_label_df,
+               aes(xend = X, x = X,
+               yend =Y-0.095,y=Y-0.03),
+    arrow = arrow(length = unit(0.2,"cm"),
+                  type="closed"
+                  ))
 
 
 
@@ -906,7 +927,7 @@ plot_grid(
 ```
 
 
-### Figure 4. Simulated serological surveys in settings with varying levels of vaccination coverage using multiple strategies to calculate seroincidence. 
+__Figure 4. Simulated serological surveys in settings with varying levels of vaccination coverage using multiple strategies to calculate seroincidence__
 
 The number of days since the first dose of the campaign is shown in parentheses. Blue line violin plots show the distribution of 100 estimates of seroincidence using different strategies (x-axis) at various levels of vaccine coverage (top of each panel). Blue dot indicates the average seroincidence estimate. Each simulated survey had 1000 persons. The true incidence was 10 infections per 100 in 200 days as shown in the grey violin plots. 
 
@@ -1547,7 +1568,8 @@ read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample 
 ## Supplement
 
 
-### Timing table
+### Table S1. Timing of sample collection for each cohort
+
 
 ```{r eval=FALSE}
 
@@ -1582,22 +1604,20 @@ final_wide %>%
                 `Samples (%)`=n_percent
         ) %>%
         flextable::flextable() %>%
-        flextable::autofit() %>% flextable::save_as_docx( path = "figures/supp_table.docx")
+        flextable::autofit() 
 
 
 
-# Type of exposure: Vaccination with Shanchol, Natural infection with VC, Challenge with ETEC strain
-# Population: Bangladeshi volunteer, Haitian voluneer, Bangladeshi case-patient, North American Volunteer
-# Total number of individuals
-# Days since exposure
-# number /percent of samples
-# Paper
+# %>% flextable::save_as_docx( path = "figures/supp_table.docx")
+
+
 
 
 
 ```
 
-### Baseline comparison
+### Figure S1. Baseline comparison of IgG markers
+
 
 ```{r}
 
@@ -1621,71 +1641,75 @@ final_wide %>%
 #                       )
 
 
-raw_baseline_plot<- final_df %>%
+final_df %>%
         filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")) %>%
         mutate(`Age Group`=ifelse(age<10,"<10 years old",">= 10 years old")) %>%
-        # mutate(`Age Group`=factor(`Age Group`,levels=c("Children","Adults"))) %>%
+ 
         mutate(isotype=factor(isotype,levels=c("IgG","IgA","IgM")))%>%
         mutate(pretty_cohort=ifelse(cohort=="SMIC/PIC",
-                                    "BGD Case",cohort
+                                    "Bangladeshi Case",
+                                    str_replace(cohort,"BGD","Bangladeshi")
                                     ))%>%
+        mutate(pretty_cohort=str_replace(pretty_cohort,"HTI","Haitian"))%>%
         filter(isotype=="IgG")%>%
         ggplot(aes(y=RAU_value,col=pretty_cohort,group=pretty_cohort,x=pretty_cohort))+
                 # geom_boxplot()+
-                ggbeeswarm::geom_beeswarm()+
-                scale_y_continuous("Baseline IgG log10(1/RAU)",breaks = c(0.25,1,4)) +
+                ggbeeswarm::geom_beeswarm(alpha=0.8,
+                                          cex=3
+                                          )+
+                scale_y_continuous("Baseline IgG log10(1/RAU)"#,breaks = c(0.25,1,4)
+                                   
+                                   ) +
                 xlab("Cohort")+
                 scale_color_brewer("Cohort",palette = "Set1")+
                 facet_grid(`Age Group`~antigen_pretty)+
                 theme_bw()+
-                theme(legend.position="bottom",
+                theme(legend.position="none",
                       axis.text.x = element_text(angle=45,hjust=1)
                       )
 
-
-
-bootDF <- read_rds("data/generated_data/analysis_objects/describe/bootDF.rds")
+# bootDF <- read_rds("data/generated_data/analysis_objects/describe/bootDF.rds")
 
 
 
 
-GMT_ratio_plot <- bootDF %>%
-        group_by(isotype,antigen_pretty,`Age Group`) %>%
-        summarize(mean=mean(RAU_ratio),
-                  lb=quantile(RAU_ratio,0.025),
-                  ub=quantile(RAU_ratio,0.975)) %>%
-        # mutate(`Age Group`=factor(`Age Group`,levels=c("<10 years old",">= 10 years old"))) %>%
-        ggplot(aes(x=`Age Group`, col=isotype,y=mean))+
-                geom_point(position = position_dodge(0.5))+
-                geom_linerange(aes(ymin=lb,ymax=ub),
-                               position = position_dodge(0.5))+
-        facet_wrap(.~antigen_pretty,nrow=1)+
-        geom_hline(yintercept=1,lty=2)+
-        theme_bw()+
-        scale_y_continuous("Geometric Mean\nRAU Ratio", trans="log2")+
-        xlab("Age Group")+
-        theme(
-              legend.position = "bottom",
-                      panel.grid.minor = element_blank(),
-                     panel.grid.major.x =  element_blank(),
-
-              )+
-        scale_color_brewer("Isotype",palette = "Dark2")
-
-
-plot_grid(raw_baseline_plot,
-          GMT_ratio_plot,
-          rel_heights = c(2,1),
-          ncol=1,
-          align = "v",
-          axis="lr",
-          labels=c("A","B")
-          )
+# GMT_ratio_plot <- bootDF %>%
+#         group_by(isotype,antigen_pretty,`Age Group`) %>%
+#         summarize(mean=mean(RAU_ratio),
+#                   lb=quantile(RAU_ratio,0.025),
+#                   ub=quantile(RAU_ratio,0.975)) %>%
+#         # mutate(`Age Group`=factor(`Age Group`,levels=c("<10 years old",">= 10 years old"))) %>%
+#         ggplot(aes(x=`Age Group`, col=isotype,y=mean))+
+#                 geom_point(position = position_dodge(0.5))+
+#                 geom_linerange(aes(ymin=lb,ymax=ub),
+#                                position = position_dodge(0.5))+
+#         facet_wrap(.~antigen_pretty,nrow=1)+
+#         geom_hline(yintercept=1,lty=2)+
+#         theme_bw()+
+#         scale_y_continuous("Geometric Mean\nRAU Ratio", trans="log2")+
+#         xlab("Age Group")+
+#         theme(
+#               legend.position = "bottom",
+#                       panel.grid.minor = element_blank(),
+#                      panel.grid.major.x =  element_blank(),
+# 
+#               )+
+#         scale_color_brewer("Isotype",palette = "Dark2")
+# 
+# 
+# plot_grid(raw_baseline_plot,
+#           GMT_ratio_plot,
+#           rel_heights = c(2,1),
+#           ncol=1,
+#           align = "v",
+#           axis="lr",
+#           labels=c("A","B")
+#           )
 ```
 
 
-### Boosting figure
+### Table S2. Geometric mean fold-rise in RAU by marker among cases and vaccines 
 
 ```{r}
 baseline_sero_data <- final_df %>%
@@ -1705,18 +1729,18 @@ peak_sero_data <- final_df %>%
         # filter(!id %in% c("IMS_A018","IMS_B021"))%>%
         select(id,status,cohort,antigen_pretty,isotype,peak=RAU_value,day)
 
-peak_sero_data %>%
-        filter(antigen_pretty=="Ogawa OSP") %>%
-        group_by(cohort,isotype) %>%
-        mutate(lb=quantile(day,0.25),
-                  ub=quantile(day,0.75)
-                  ) %>%
-        group_by(cohort,isotype,lb,ub) %>%
-        summarise(n=n(),
-                  peaked=sum(day>=lb&day<=ub)
-                  )%>%
-        mutate(peaked/n) %>%
-        arrange(isotype)
+# peak_sero_data %>%
+#         filter(antigen_pretty=="Ogawa OSP") %>%
+#         group_by(cohort,isotype) %>%
+#         mutate(lb=quantile(day,0.25),
+#                   ub=quantile(day,0.75)
+#                   ) %>%
+#         group_by(cohort,isotype,lb,ub) %>%
+#         summarise(n=n(),
+#                   peaked=sum(day>=lb&day<=ub)
+#                   )%>%
+#         mutate(peaked/n) %>%
+#         arrange(isotype)
 
 
 baseline_sero_data %>%
@@ -1738,6 +1762,14 @@ baseline_sero_data %>%
         flextable::autofit()
 
 
+```
+
+### Table S3. Proportion of individuals with a two fold-rise in RAU by marker among cases and vaccines 
+
+
+```{r}
+
+
 baseline_sero_data %>%
         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
                                      "O139 OSP", "TcpA"
@@ -1757,7 +1789,66 @@ baseline_sero_data %>%
         flextable::autofit()
 ```
 
-## Misclassification with more markers
+
+
+### Figure S2: Multidimensional scaling analysis of all serological data collected
+
+```{r mds-code, eval=FALSE}
+
+# multidimensional-scaling provides object with mds analysis
+source("code/R/multidimensional-scaling.R")
+
+```
+
+```{r}
+#get mds measurements
+mds_obj <- read_rds("data/generated_data/analysis_objects/mds/mds_obj.rds")
+permuted_distances <- read_rds("data/generated_data/analysis_objects/mds/permuted_distances.rds")
+
+mds_obj %>%
+        group_by(time_window,status) %>%
+        summarise(avg_D1=mean(D1),
+                  avg_D2=mean(D2)
+                  ) %>%
+        gather(dimension,value,-c(time_window,status)) %>%
+        spread(status,value) %>%
+        mutate(distance=(Case-Vaccinee)^2) %>%
+        group_by(time_window) %>%
+        summarise(euclidean=sqrt(sum(distance)))
+
+permuted_distances %>%
+        group_by(time_window) %>%
+        summarize(quantile(euclidean,0.999))
+centroids <- mds_obj %>%
+                        group_by(time_window,status) %>%
+                        summarize(D1=mean(D1),
+                                  D2=mean(D2)
+                                  )
+
+mds_obj  %>%
+        mutate(cohort=case_when(
+                        cohort=="BGD Vaccinee" ~ "Bangladeshi Vaccinees",
+                        cohort=="HTI Vaccinee" ~ "Haitian Vaccinees",
+                        cohort=="SMIC/PIC" ~ "Bangladeshi Cases",
+
+        ))%>%
+                ggplot(aes(x=D1,y=D2,col=cohort)) +
+                geom_point(aes(shape=cohort))+
+                scale_color_manual("Cohort", values=c("red","#003262","#FDB515"))+
+                scale_shape_manual("Cohort",values=c(2,1,1))+
+                xlab("Dimension 1")+
+                ylab("Dimension 2")+
+        facet_wrap(.~time_window,scales="free")+
+        theme_cowplot()+
+        theme(legend.position = "bottom")
+
+```
+
+
+
+### Figure S3: Misclassification of vaccinees as seropositive by previous seroincidence models with additional markers using 45, 120, 200, and 300 day infection windows. 
+
+
 
 ```{r}
 
@@ -1815,7 +1906,7 @@ misclassify_df%>% filter(variables=="All Variables")%>%
 
 
 
-misclassify_df %>% filter(variables=="All Variables")%>%
+fs3<- misclassify_df %>% filter(variables=="All Variables")%>%
         filter(cohort %in% c("HTI Vaccinee","BGD Vaccinee"))%>%
         group_by(day,end_window,cohort) %>%
         summarize(seropos=mean(spec95_seropos))%>%
@@ -1852,68 +1943,31 @@ misclassify_df %>% filter(variables=="All Variables")%>%
         theme(legend.position = "bottom")
         
         
+nmfp_label_df <- data.frame(
+                end_window="45",
+                X=270,
+                Y=0.15
+) %>% mutate(end_window=factor(end_window,
+                                 levels=c("45","120","200","300"),
+                                 labels=c("45-day","120-day","200-day","300-day")))
+  
+fs3 + geom_text(data=nmfp_label_df,
+                label="Nominal false\npositivity rate",
+                aes(x=X,y=Y),fontface="bold"
+                )+
+  geom_segment(data=nmfp_label_df,
+               aes(xend = X, x = X,
+               yend =Y-0.095,y=Y-0.05),
+    arrow = arrow(length = unit(0.2,"cm"),
+                  type="closed"
+                  ))
 
 
 
 ```
 
 
-
-## MDS Analysis
-
-```{r mds-code, eval=FALSE}
-
-# multidimensional-scaling provides object with mds analysis
-source("code/R/multidimensional-scaling.R")
-
-```
-
-```{r}
-#get mds measurements
-mds_obj <- read_rds("data/generated_data/analysis_objects/mds/mds_obj.rds")
-permuted_distances <- read_rds("data/generated_data/analysis_objects/mds/permuted_distances.rds")
-
-mds_obj %>%
-        group_by(time_window,status) %>%
-        summarise(avg_D1=mean(D1),
-                  avg_D2=mean(D2)
-                  ) %>%
-        gather(dimension,value,-c(time_window,status)) %>%
-        spread(status,value) %>%
-        mutate(distance=(Case-Vaccinee)^2) %>%
-        group_by(time_window) %>%
-        summarise(euclidean=sqrt(sum(distance)))
-
-permuted_distances %>%
-        group_by(time_window) %>%
-        summarize(quantile(euclidean,0.999))
-centroids <- mds_obj %>%
-                        group_by(time_window,status) %>%
-                        summarize(D1=mean(D1),
-                                  D2=mean(D2)
-                                  )
-
-mds_obj  %>%
-        mutate(cohort=case_when(
-                        cohort=="BGD Vaccinee" ~ "Bangladeshi Vaccinees",
-                        cohort=="HTI Vaccinee" ~ "Haitian Vaccinees",
-                        cohort=="SMIC/PIC" ~ "Bangladeshi Cases",
-
-        ))%>%
-                ggplot(aes(x=D1,y=D2,col=cohort)) +
-                geom_point(aes(shape=cohort))+
-                scale_color_manual("Cohort", values=c("red","#003262","#FDB515"))+
-                scale_shape_manual("Cohort",values=c(2,1,1))+
-                xlab("Dimension 1")+
-                ylab("Dimension 2")+
-        facet_wrap(.~time_window,scales="free")+
-        theme_cowplot()+
-        theme(legend.position = "bottom")
-
-```
-
-
-### Performance analysis all variables
+### Figure S4: Comparison of performance of random forest models when serological data from vaccinees are included in the training set and additional markers. 
 
 
 ```{r }
@@ -2104,6 +2158,10 @@ plot_grid(
 
 
 
+
+
+##OLD STUFF
+
 ## ROC comparison
 
 ```{r}
@@ -2169,8 +2227,6 @@ loocv_3class_df %>%
 
 ```
 
-
-##OLD STUFF
 
 ```{r}
 
