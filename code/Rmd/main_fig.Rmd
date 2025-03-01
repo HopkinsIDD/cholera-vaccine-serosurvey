@@ -215,12 +215,12 @@ true_neg <- fig1_df %>%
 
 
 
-fig1_df %>%
+f1 <- fig1_df %>%
         filter(status=="Vaccinee")  %>%
         mutate(Vaccinee=case_when(
                 cohort== "BGD Vaccinee" & age <10 ~ "Bangladeshi < 10 years",
                 cohort== "BGD Vaccinee" & age>=10 ~ "Bangladeshi 10+ years",
-                TRUE ~ "Haitian Vaccinee 18+ years"
+                TRUE ~ "Haitian 18+ years"
         )) %>%
         ggplot(aes(y=RAU_value))+
                 geom_line(aes(group=id,
@@ -229,6 +229,12 @@ fig1_df %>%
                               ),
                           alpha=0.5
                           )+
+        # geom_point(aes(
+        #                       x=day,
+        #                       col=Vaccinee
+        #                       ),
+        #                   alpha=0.5
+        #                   )+
                 geom_rug(data=true_pos,sides="l",col="red",alpha=0.3)+
                 geom_rug(data=true_neg,sides="r",col="black",alpha=0.3)+
                 facet_grid(isotype~antigen_pretty)+
@@ -242,7 +248,10 @@ fig1_df %>%
         theme(legend.position = "bottom")
   
   
+f1
 
+ggsave(plot=f1,filename="figures/main_text/figure1.pdf", height = 4.36,width = 6.5,scale = 1.5)
+ggsave(plot=f1,filename="figures/main_text/figure1.png", height = 4.36,width = 6.5,scale = 1.5)
 ```
 
 
@@ -348,7 +357,7 @@ f2a <- misclassify_df %>% filter(variables=="Reduced IgG Panel")%>%
         facet_grid(.~end_window)+
         theme_cowplot()+
         scale_x_continuous("Days since first dose",breaks=seq(0,365,90))+
-        scale_y_continuous("Proportion Seropositive")+
+        scale_y_continuous("Proportion Seroincident")+
         scale_color_manual(values = c("#003262","#FDB515"))+
         scale_shape_manual(values=c(1,1))+
         geom_hline(yintercept = 0.05,lty=2)+
@@ -364,8 +373,8 @@ nmfp_label_df <- data.frame(
                                  levels=c("45","120","200","300"),
                                  labels=c("45-day","120-day","200-day","300-day")))
   
-f2a + geom_text(data=nmfp_label_df,
-                label="Nominal false\npositivity rate",
+f2<- f2a + geom_text(data=nmfp_label_df,
+                label="Nominal false\npositive rate",
                 aes(x=X,y=Y),fontface="bold"
                 )+
   geom_segment(data=nmfp_label_df,
@@ -375,6 +384,10 @@ f2a + geom_text(data=nmfp_label_df,
                   type="closed"
                   ))
 
+f2
+
+ggsave(plot=f2,filename="figures/main_text/figure2.pdf", height = 2.39,width = 6.5,scale = 1.5)
+ggsave(plot=f2,filename="figures/main_text/figure2.png", height = 2.39,width = 6.5,scale = 1.5)
 
 
 ```
@@ -784,7 +797,7 @@ p1 <- loocv_tvfit_df %>%
         scale_fill_manual(values = c("red","blue"))+
         xlab("Days since vaccination")+
         scale_y_continuous("False Positive Rate",limits = c(0,0.25))+
-        geom_hline(yintercept = 0.05,lty=2,col="grey")+
+        geom_hline(yintercept = 0.05,lty=2)+
         theme_cowplot()+
         theme(legend.position = "none")
 
@@ -840,9 +853,9 @@ p2_outside_df <- loocv_spec_df %>%
 p2<- bind_rows(p2_outside_df,p2_vax_df)%>%
         mutate(Model=factor(variables,
                             levels=c("original","reduced_2class","reduced_3class"),
-                            labels=c("Case-only model",
-                                     "Mixed-cohort model",
-                                     "Mixed-cohort 3-class model"
+                            labels=c("Infection-Only model",
+                                     "Mixed-Cohort\nTwo Class model",
+                                     "Mixed-Cohort\nThree Class model"
                                      )
                             )) %>%
         mutate(population=factor(population))%>%
@@ -855,7 +868,7 @@ p2<- bind_rows(p2_outside_df,p2_vax_df)%>%
                            position = position_dodge(0.5)
                            )+
         theme_cowplot()+
-        geom_hline(yintercept = 0.05,lty=2,col="grey")+
+        geom_hline(yintercept = 0.05,lty=2)+
         scale_color_manual(values = c("black","red","blue"))+
         scale_y_continuous("False Positive Rate",limits = c(0,0.25))+
         xlab("Population")
@@ -906,7 +919,7 @@ p4 <- loocv_df %>%
         mutate(proportion=n/sum(n)) %>%
         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
         mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
-        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently\n"))%>%
         ggplot(aes(x=three_class,y=prediction))+
         geom_tile(aes(fill=100*proportion))+
         geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
@@ -918,11 +931,19 @@ p4 <- loocv_df %>%
         theme_cowplot()
 
 
-plot_grid(
-        plot_grid(p1,p2,nrow=1,rel_widths = c(1,1), labels=c("A","B")),
-        plot_grid(p3,p4,nrow = 1,rel_widths = c(1,1), labels=c("C","D")),
+f3 <- plot_grid(
+        plot_grid(p1,p2,nrow=1,rel_widths = c(1,1.2), labels=c("A","B")),
+        plot_grid(p3,p4,nrow = 1,rel_widths = c(1,1.2), labels=c("C","D")),
         nrow=2
         )
+
+f3
+
+ggsave(plot=f3,filename="figures/main_text/figure3.pdf", height = 4.22,width = 6.5,scale = 1.5)
+ggsave(plot=f3,filename="figures/main_text/figure3.png", height = 4.22,width = 6.5,scale = 1.5)
+
+
+
 
 ```
 
@@ -1151,7 +1172,7 @@ lambda_df <- read_rds("data/generated_data/analysis_objects/simulation/lambda_df
 sims_original <- read_rds("data/generated_data/analysis_objects/simulation/sims_original_10.rds")
 
 
-lambda_df%>%
+f4 <- lambda_df%>%
         # mutate(campaign_day=ifelse(adjustment=="Alternative",21,campaign_day))%>%
         # mutate(new_strategy=paste(adjustment,campaign_day)) %>%
         # mutate(campaign_day=glue::glue("{campaign_day} days post campaign start"))%>%
@@ -1172,9 +1193,13 @@ lambda_df%>%
                 adjustment=="Questionnaire" ~ 2
         )) %>%
         mutate(new_adjustment=factor(new_adjustment,
-                                     labels=c("No adjustment\nfor vaccination",
-                                              "Adjust estimates after\nknowing vaccination status",
-                                              "Predict with\nMixed-Cohort Model"
+                                     # labels=c("No adjustment\nfor vaccination",
+                                     #          "Adjust estimates after\nknowing vaccination status",
+                                     #          "Predict with\nMixed-Cohort Model"
+                                     #          )
+                                     labels=c("Crude adjustment with\nthe Infection-Only Model",
+                                              "Stratified adjustment with\nthe Infection-Only Model",
+                                              "Coverage adjustment with\nthe Mixed-Cohort Two Class Model"
                                               )
                                      ))%>%
         # group_by(new_strategy,coverage)%>%
@@ -1200,7 +1225,10 @@ lambda_df%>%
         xlab("Vaccination Coverage")+
         theme(legend.position = "bottom")
 
+f4
 
+ggsave(plot=f4,filename="figures/main_text/figure4.pdf", height = 2.89,width = 6.09,scale = 1.7)
+ggsave(plot=f4,filename="figures/main_text/figure4.png", height = 2.89,width = 6.09,scale = 1.7)
 
 
 # #get the truth form the simulations in the right format
