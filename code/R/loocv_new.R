@@ -76,7 +76,7 @@ for(v in 1:length(formula_list)){
                 #keep 50% fit and 50% to test
                 cut_data <- data.frame()
 
-                for(j in 1:100){ #normally 1:100
+                for(j in 1:5){ #normally 1:100
 
                         #define who is in and who is out
                         outside <-fit_data %>%

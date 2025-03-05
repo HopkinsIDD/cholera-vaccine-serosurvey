@@ -394,363 +394,9 @@ ggsave(plot=f2,filename="figures/main_text/figure2.png", height = 2.39,width = 6
 
 
 __Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days).__
-
-```{r loocv-code, eval=FALSE}
-
-source("loocv.R")
-
+```{r eval=FALSE}
+source("code/R/loocv_new.R")
 ```
-
-
-```{r avg-sens}
-
-loocv_tvfit_list <- read_rds(
-          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_list.rds")
-)
-
-tvsens_draws <- bind_rows(
-        loocv_tvfit_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$out_df %>%
-                mutate(model="Original Model"),
-        loocv_tvfit_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$out_df %>%
-                mutate(model="Alternative Model 1"),
-        loocv_tvfit_list$`All Variables`$all_fitdata$`200-day`$Case$out_df %>%
-                mutate(model="Alernative Model 2")
-        )%>%
-        filter(time<=200)
-
-tvsens_draws %>%
-        group_by(.draw,model) %>%
-        summarize(avg_sens=mean(theta)) %>%
-        group_by(model)%>%
-        summarize(median=round(100*median(avg_sens)),
-                  lb=round(100*quantile(avg_sens,0.025)),
-                  ub=round(100*quantile(avg_sens,0.975))
-                  )
-
-
-```
-
-
-```{r loocv-figure, eval=TRUE,fig.width=6,fig.height=10}
-
-#variable list
-#variable list
-var_list <- list(
-        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA"),
-        `All Variables`= data.frame(marker=colnames(final_wide)) %>%
-                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
-                unlist()  %>% unname(),
-        `Reduced IgG Panel (and age)` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
-        `All Variables (and age)`= data.frame(marker=colnames(final_wide)) %>%
-                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
-                unlist() %>% c("age") %>% unname()
-)
-
-tree_param <- 1000
-
-#get permutation importance
-importance<- ranger::ranger(data=final_wide %>%
-                filter(cohort %in% c("SMIC/PIC","BGD Vaccinee","HTI Vaccinee"))%>%
-                                    addInfectionWindow(end_window=200),
-                            formula=make_formula("inf_200",var_list[["All Variables"]]),
-                            num.trees= tree_param,
-                            case.weights = NULL,
-                            importance = "permutation"
-)
-
-importance$variable.importance %>% sort()
-
-#get permutation importance
-importance<- ranger::ranger(data=final_wide %>%
-                filter(cohort %in% c("SMIC/PIC","BGD Vaccinee","HTI Vaccinee"))%>%
-                                    addInfectionWindow(end_window=200),
-                            formula=make_formula("inf_200",var_list[["Reduced IgG Panel"]]),
-                            num.trees= tree_param,
-                            case.weights = NULL,
-                            importance = "permutation"
-)
-importance$variable.importance%>% sort()
-
-
-
-f3_loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df.rds") %>%
-        ### limit to the correct data and variables 
-        filter(base_data_name %in% c("smicpic_fitdata","all_fitdata"))%>%
-        filter(variables %in% c("Reduced IgG Panel","All Variables"))%>%
-        #remove the all variables model for just smic/pic data
-        filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
-        mutate(new_modelname=case_when(
-                base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
-                base_data_name == "all_fitdata" &variables == "Reduced IgG Panel" ~ "Alternative Model 1",
-                base_data_name == "all_fitdata" &variables == "All Variables"~ "Alternative Model 2"
-        )) %>%
-        mutate(new_modelname=factor(new_modelname,levels=c(
-                                                           "Alternative Model 1",
-                                                           "Alternative Model 2",
-                                                           "Original Model"
-                                                           ))) 
-
-
-f3_tvfit_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_df.rds") %>%
-        ### limit to the correct data and variables 
-        filter(base_data_name %in% c("smicpic_fitdata","all_fitdata"))%>%
-        filter(variables %in% c("Reduced IgG Panel","All Variables"))%>%
-        #remove the all variables model for just smic/pic data
-        filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
-        mutate(new_modelname=case_when(
-                base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
-                base_data_name == "all_fitdata" &variables == "Reduced IgG Panel" ~ "Alternative Model 1",
-                base_data_name == "all_fitdata" &variables == "All Variables"~ "Alternative Model 2"
-        )) %>%
-        mutate(new_modelname=factor(new_modelname,levels=c(
-                                                           "Alternative Model 1",
-                                                           "Alternative Model 2",
-                                                           "Original Model"
-                                                           ))) 
-
-f3_spec_df <- read_rds( paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_df.rds"))%>%
-        ### limit to the correct data and variables 
-        filter(base_data_name %in% c("smicpic_fitdata","all_fitdata"))%>%
-        filter(variables %in% c("Reduced IgG Panel","All Variables"))%>%
-        #remove the all variables model for just smic/pic data
-        filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
-        mutate(new_modelname=case_when(
-                base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
-                base_data_name == "all_fitdata" &variables == "Reduced IgG Panel" ~ "Alternative Model 1",
-                base_data_name == "all_fitdata" &variables == "All Variables"~ "Alternative Model 2"
-        )) %>%
-        mutate(new_modelname=factor(new_modelname,levels=c(
-                                                           "Alternative Model 1",
-                                                           "Alternative Model 2",
-                                                           "Original Model"
-                                                           ))) %>%
-        mutate(population=ifelse(
-                population =="Vaccinee",
-                "Vaccinated", "Unvaccinated"
-
-        )) 
-
-f3_spec_df %>%
-        mutate(
-               median=round(100*median), 
-               lb=round(100*lb),
-               ub=round(100*ub)) %>%
-        select(new_modelname,population,median,lb,ub)
-
-# f3a <- f3_loocv_df %>%
-#         filter(cohort=="SMIC/PIC") %>%
-#         ggplot(alpha=0.7)+ 
-#         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=new_modelname),labels=FALSE,n.cuts=0)+ 
-#         geom_abline(lty=3,col="grey50")+
-#         xlab("False Positivity Rate")+
-#         ylab("True Positivity Rate")+
-#         scale_color_brewer("Model",palette ="Dark2")+
-#         theme_cowplot()
-# 
-# f3b <- f3_loocv_df %>%
-#         filter(base_data_name=="all_fitdata")%>%
-#         ggplot()+ 
-#         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)),
-#                               col=new_modelname),labels=FALSE,n.cuts=0
-#                           )+ 
-#         geom_abline(lty=3,col="grey50")+
-#         xlab("False Positivity Rate")+
-#         ylab("True Positivity Rate")+
-#         scale_color_brewer("Model",palette ="Dark2")+
-#         theme_cowplot()
-
-f3a <- f3_loocv_df %>%
-        ggplot()+ 
-        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)),
-                              col=new_modelname),labels=FALSE,n.cuts=0
-                          )+ 
-        geom_abline(lty=3,col="grey50")+
-        xlab("False Positivity Rate")+
-        ylab("True Positivity Rate")+
-        scale_color_brewer("Model",palette ="Dark2")+
-        theme_cowplot()
-
-
-
-plotROC::calc_auc(f3a)
-
-f3c <- f3_loocv_df %>%
-        filter(inf_200==1)%>%
-        group_by(new_modelname,day) %>%
-        summarize(seropos=mean(spec95_seropos))  %>%      
-        ggplot(aes(col=new_modelname,fill=new_modelname))+
-                geom_point(aes(x=day,y=seropos),shape=1)+
-                geom_line(data=filter(f3_tvfit_df,population== "Case",time<200),aes(x=time,y=median))+
-                geom_ribbon(data=filter(f3_tvfit_df,population== "Case",time<200),
-                            aes(x=time,ymin=lb,ymax=ub),col=NA,
-                                            alpha=0.2
-                                )+
-                facet_grid(.~new_modelname,scales="free_x",space="free")+
-                scale_color_brewer("Model",palette ="Dark2")+
-                scale_fill_brewer("Model",palette ="Dark2")+
-                theme_bw()+
-                theme(  panel.grid.major.x=element_blank(),
-                        panel.grid.minor =element_blank(),
-                        )+
-                ylab("Sensitivity")+
-                xlab("Days after symptom onset")
-
-f3d <- f3_spec_df %>%
-        ggplot()+
-                geom_point(aes(x=population,y=median,col=new_modelname))+
-                geom_linerange(aes(x=population,ymin=lb,ymax=ub,col=new_modelname))+
-                scale_color_brewer("Model",palette ="Dark2")+
-                theme_bw()+
-                theme(  panel.grid.major.x=element_blank(),
-                        panel.grid.minor =element_blank(),
-                        axis.text.x = element_text(angle=45,hjust = 1)
-                        )+
-                geom_hline(yintercept = 0.95,lty=2)+
-        facet_grid(.~new_modelname,scales="free_x")+
-        scale_y_continuous("Specificity",limits=c(0.85,1))+
-        xlab("Population")
-        
-
-f3_spec_df
-
-# plot_grid(f3a+ggtitle("Cases and uninfected\ncontacts only")+
-#                   theme(legend.position = c(0.25,0.4),
-#                         legend.background = element_rect(fill = "white",color = "black"))
-#                   ,
-#           f3b+ggtitle("All samples")+
-#                   theme(legend.position ="none"),nrow=1,align="h",
-#                   labels = c("A","B")) %>%
-#         plot_grid(f3c+theme(legend.position ="none"),
-#                   f3d+theme(legend.position ="none"),ncol=1,
-#                   labels = c("","C","D")
-#                   )
-
-
-plot_grid(
-        plot_grid(f3a+#ggtitle("Cases and uninfected\ncontacts only")+
-                  theme(legend.position = c(0.25,0.4),
-                        legend.background = element_rect(fill = "white",color = "black")),
-                  ggplot()+
-                          theme_void(),
-                  rel_widths = c(2,1)
-                  ),
-        f3c+theme(legend.position ="none"),
-        f3d+theme(legend.position ="none"),ncol=1,
-                  labels = c("A","B","C"),
-                  rel_heights = c(3,2,2.5)
-                  )
-
-
-
-# loocv_df %>%
-#         filter(status=="Case")%>%
-#                 filter(base_data_name!="bgd_fitdata")%>%
-#         group_by(variables,day,base_data_name,status,inf_200)%>%
-#         summarize(seropos=mean(spec95_seropos)) %>%
-#         ggplot(aes(x=factor(day),fill=inf_200,y=seropos))+
-#         geom_col(position=position_dodge2())+
-#         facet_grid(paste(variables,base_data_name)~.,scales="free_x",space="free")+
-#         geom_hline(yintercept = 0.05,lty=2)+
-#         theme_cowplot()+
-#         xlab("Day")+
-#         ylab("Seropositivity")+
-#         scale_fill_brewer("Model",palette="Dark2")+
-#         theme(axis.text.x = element_text(hjust=1,angle=45),
-#               legend.position = "none")
-# 
-# 
-# 
-# loocv_df %>%
-#         filter(status=="Vaccinee")%>%
-#         filter(base_data_name=="all_fitdata")%>%
-#         group_by(variables,day,base_data_name,status)%>%
-#         summarize(seropos=mean(spec95_seropos)) %>%
-#         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
-#         geom_col(position=position_dodge2())+
-#         facet_grid(status~paste(variables,base_data_name),scales="free_x",space="free")+
-#         geom_hline(yintercept = 0.05,lty=2)+
-#         theme_cowplot()+
-#         xlab("Day")+
-#         ylab("Seropositivity")+
-#         scale_fill_brewer("Model",palette="Dark2")+
-#         cowplot::theme_cowplot()+
-#         theme(axis.text.x = element_text(hjust=1,angle=45),
-#               legend.position = "none")
-# 
-# filter(loocv_tvfit_df,population== "Vaccinee") %>%
-#         filter(base_data_name!="bgd_fitdata")%>%
-#         ggplot()+
-#                 geom_line(aes(x=time,y=median,col=paste(base_data_name,variables)))+
-#                 geom_ribbon( aes(x=time,y=median,ymin=lb,ymax=ub,fill=paste(base_data_name,variables)),col=NA,
-#                                             alpha=0.2
-#                                 )+
-#                 cowplot::theme_cowplot()+
-#                 geom_hline(yintercept = 0.05,lty=2)+
-#                 scale_y_continuous(limits=c(0,1))+
-#         xlab("Day")+
-#         ylab("Seropositivity")
-        
-                #geom_vline(xintercept = 200)
-
-# f3a <- loocv_df %>%
-#         ggplot()+ 
-#         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=variables),labels=FALSE,n.cuts=0)+ 
-#         geom_abline(lty=3,col="grey50")+
-#         xlab("False Positivity Rate")+
-#         ylab("True Positivity Rate")+
-#         scale_color_brewer("Model",palette ="Dark2")+
-#         theme_cowplot()+
-#         theme(legend.position = "none")
-# 
-# plotROC::calc_auc(f3a)
-# 
-# 
-# f3b <- loocv_df %>%
-#         group_by(variables,day,status)%>%
-#         summarize(seropos=mean(spec95_seropos)) %>%
-#         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
-#         geom_col(position=position_dodge2())+
-#         facet_grid(.~status,scales="free_x",space="free")+
-#         geom_hline(yintercept = 0.05,lty=2)+
-#         theme_cowplot()+
-#         xlab("Day")+
-#         ylab("Seropositivity")+
-#         scale_fill_brewer("Model",palette="Dark2")+
-#         theme(axis.text.x = element_text(hjust=1,angle=45),
-#               legend.position = "none")
-# 
-# 
-# external_df <- read_rds("data/generated_data/external_df.rds")
-# 
-# 
-# f3c <- external_df %>%
-#         filter(training_set == "Vax included" | variables=="Reduced IgG Panel") %>%
-#         mutate(variables=ifelse(training_set=="No vax included",
-#                                 "Original",variables
-#                                 )) %>%
-#         group_by(variables,day,cohort)%>%
-#         summarize(seropos=mean(spec95_seropos)) %>%
-#         mutate(variables=factor(variables,
-#                                 levels=c(
-#                                          
-#                                          "All Variables",
-#                                          "Reduced IgG Panel",
-#                                          "Original"
-#                                          ))) %>%
-#         mutate(variables=fct_rev(variables))%>%
-#         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
-#         geom_col(position=position_dodge2())+
-#         geom_hline(yintercept = 0.05,lty=2)+
-#         theme_cowplot()+
-#         xlab("Day")+
-#         ylab("Seropositivity"               )+
-#         scale_fill_brewer("Model",palette="Dark2",direction = -1)+
-#         theme(axis.text.x = element_text(hjust=1,angle=45))
-# 
-# plot_grid(f3a,f3b, f3c, ncol = 1,labels = c("A","B","C"))
-
-```
-
 
 ```{r newfigure3, eval=FALSE}
 
@@ -953,7 +599,7 @@ __Figure 4. Simulated serological surveys in settings with varying levels of vac
 The number of days since the first dose of the campaign is shown in parentheses. Blue line violin plots show the distribution of 100 estimates of seroincidence using different strategies (x-axis) at various levels of vaccine coverage (top of each panel). Blue dot indicates the average seroincidence estimate. Each simulated survey had 1000 persons. The true incidence was 10 infections per 100 in 200 days as shown in the grey violin plots. 
 
 
-```{r simulation-results???}
+```{r simulation-results}
 
 #get sensitivty estimates
 
@@ -1344,231 +990,7 @@ ggsave(plot=f4,filename="figures/main_text/figure4.png", height = 2.89,width = 6
 ```
 
 
-```{r}
 
-
-# graph_altlambda_df<- lambda_df  %>%
-#                                 filter(adjustment=="Alternative") 
-#                         
-# 
-# 
-# bind_rows(lambda_df %>% filter(adjustment!="Alternative"),
-#           graph_altlambda_df %>% mutate(campaign_day=21),
-#           graph_altlambda_df %>% mutate(campaign_day=120)
-#           )  
-
-
-
-
-
-
-```
-
-
-
-### Figure 5: Model performance to distinguish recently infected individuals, recently vaccinated individuals, and individuals neither recently infected nor vaccinated. 
-
-Samples of recently infected individuals were collected between 5 and 200 days after symptom onset. Samples of recently vaccinated individuals (from Bangladesh and Haiti) were collected between 5 and 200 days after the first dose was given. Samples of individuals who were neither recently infected nor vaccinated were from Bangladeshi cases, Bangladeshi uninfected contacts, Bangladeshi vaccinees, and Haitian vaccinees. 
-
-
-```{r threeclass-code, eval=FALSE}
-
-source("code/R/loocv_3class.R")
-
-```
-
-```{r threeclass-figure, eval=TRUE,fig.width=5.5,fig.height=9}
-
-
-loocv_3class_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_3class_df.rds")
-
-
-
-
-loocv_3class_df %>% filter(variables=="Reduced IgG Panel") %>%
-        group_by(three_class) %>%
-        summarize(samples=n(),
-                  individuals=length(unique(id))
-                  )
-
-loocv_3class_df %>%
-        filter(variables %in% c("All Variables","Reduced IgG Panel"))%>%
-        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
-        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
-        mutate(prediction=factor(prediction)) %>%
-        group_by(variables,three_class) %>%
-        mutate(Days=paste0(sort(unique(day)),collapse = ", ")) %>%
-        group_by(variables,three_class,Days,prediction,.drop=FALSE) %>%
-        summarize(n=n(),
-                  ) %>%
-        group_by(variables,three_class,Days)%>%
-        mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%)")) %>%
-        spread(prediction,n) %>%
-        rename(`Observed Class`=three_class,
-               Model=variables) %>%
-        flextable::flextable() %>%
-        flextable::autofit()
-
-
-
-loocv_3class_df %>%
-        filter(variables %in% c("All Variables","Reduced IgG Panel"))%>%
-        mutate(three_class=factor(three_class),
-               prediction=factor(prediction)
-               ) %>%
-        count(variables,three_class,prediction,.drop=FALSE) %>%
-                group_by(variables,three_class) %>%
-                mutate(proportion=n/sum(n)) %>%
-        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
-        mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
-        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
-        ggplot(aes(x=three_class,y=prediction))+
-                geom_tile(aes(fill=100*proportion))+
-                facet_wrap(.~variables)+
-                geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
-        scale_fill_distiller("Percent\nClassified",palette = "Oranges",
-                             direction = 1
-                             )+
-        xlab("True Class")+
-        ylab("Predicted Class")+
-        theme_cowplot()
-        # theme(axis.text.x = element_text(angle=45,hjust=1))
-
-# confusion_matrix_df <- read_rds("data/generated_data/loocv_3class_df.rds") %>%
-#         count(variables,three_class,prediction) %>%
-#                 group_by(variables,three_class) %>%
-#                 mutate(proportion=n/sum(n)) %>%
-#         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
-#         mutate(prediction=str_replace(prediction,"Recently","Recently "))
-# 
-# 
-# confusion_plot <- confusion_matrix_df %>%
-#         ggplot(aes(x=three_class,y=prediction))+
-#                 geom_tile(aes(fill=100*proportion))+
-#                 facet_wrap(.~variables)+
-#                 geom_text(aes(label=scales::percent(round(proportion,2),1)))+
-#         scale_fill_distiller("Percent\nClassified",palette = "Oranges",direction = 1)+
-#         xlab("Observed Class")+
-#         ylab("Predicted Class")+
-#         theme_cowplot()
-# 
-# 
-# incidence_lvls <- c(0.05,0.10,0.15)
-# coverage_lvls <- seq(0,1,0.02)
-# 
-# 
-# # sens3_df <- confusion_matrix_df %>%
-# #         mutate(three_class=str_replace(three_class,"\n"," ")) %>%
-# #         select(variables,three_class,prediction,proportion)  %>%
-# #         filter(three_class==prediction) %>%
-# #         select(variables,three_class,sensitivity=proportion)
-# 
-# #get class level sensitivity and specificity
-# class_pred_df <- data.frame()
-# for( class in c("Recently Infected", "Recently Vaccinated","Neither")){
-#         
-#         class_pred_df <- bind_rows(
-#                 class_pred_df,
-#                 confusion_matrix_df %>%
-#         mutate(three_class=str_replace(three_class,"\n"," ")) %>%
-#         select(variables,three_class,prediction,proportion)  %>%
-#         spread(prediction,proportion) %>%
-#         mutate(percent= ifelse(three_class==class,
-#                                !!sym(class),
-#                                1 - !!sym(class))) %>%
-#         mutate(prediction=class) %>%
-#         mutate(parameter=ifelse(three_class==class,
-#                                 "sensitivity","class_specificity"
-#                                 ))%>%
-#         select(variables,three_class, prediction,percent,parameter)
-#                 
-#         )        
-#         
-# }
-# 
-# #get sensitivity df
-# sens_df <- class_pred_df %>% filter(parameter=="sensitivity") %>%
-#         spread(parameter,percent) %>%
-#         select(-three_class)
-# #get specificity df
-# spec_df <- class_pred_df %>% filter(parameter=="class_specificity") %>%
-#         select(variables,three_class,prediction,percent) %>%
-#         spread(three_class,percent) %>%                       
-#         expand_grid(incidence=incidence_lvls,coverage=coverage_lvls) %>%
-#         mutate(vax_notinf=coverage*(1-incidence),
-#                notboth=1-incidence-vax_notinf
-#                ) %>% 
-#         mutate(specificity=case_when(
-#                 prediction=="Neither" ~ (`Recently Infected`*incidence + `Recently Vaccinated`*vax_notinf)/(incidence+vax_notinf),
-#                 prediction=="Recently Infected" ~ (Neither*notboth + `Recently Vaccinated`*vax_notinf)/(notboth+vax_notinf),
-#                 prediction=="Recently Vaccinated" ~ (Neither*notboth + `Recently Infected`*incidence)/(notboth+incidence)
-#         )) %>%        
-#         select(-Neither,-`Recently Infected`,-`Recently Vaccinated`)
-# 
-# 
-# spec_df %>%filter(coverage==0.5) %>%
-#         # filter(variables=="All Variables") %>%
-#         filter(incidence==0.1)
-# 
-# 
-# #calculate PPV and NPV
-# PV_df <- left_join(sens_df,spec_df)  %>%
-#         mutate(
-#                 PPV= case_when(
-#                         prediction=="Neither"~ notboth*sensitivity/(notboth*sensitivity + (1-notboth)*(1-specificity)) ,
-#                         prediction=="Recently Infected"~ incidence*sensitivity/(incidence*sensitivity + (1-incidence)*(1-specificity)),
-#                         prediction=="Recently Vaccinated"~vax_notinf*sensitivity/(vax_notinf*sensitivity + (1-vax_notinf)*(1-specificity))
-#                        ),
-#                 NPV= case_when(
-#                         prediction=="Neither"~ (1-notboth)*specificity/(notboth*(1-sensitivity) + (1-notboth)*(specificity)) ,
-#                         prediction=="Recently Infected"~ (1-incidence)*specificity/(incidence*(1-sensitivity) + (1-incidence)*(specificity)),
-#                         prediction=="Recently Vaccinated"~ (1-vax_notinf)*specificity/(vax_notinf*(1-sensitivity) + (1-vax_notinf)*(specificity))
-#                        )
-# 
-#         )
-# 
-# 
-# PV_df %>% filter(variables=="All Variables") %>%
-#         filter(incidence==0.1) %>%
-#         filter(prediction=="Recently Infected") %>%
-#         summarize(min(PPV),
-#                   max(PPV),
-#                   min(NPV),
-#                   max(NPV)
-#                   )
-# 
-# PV_df %>% filter(variables=="All Variables") %>%
-#         filter(incidence==0.1) %>%
-#         filter(prediction=="Recently Vaccinated") %>%
-#         mutate(combo=PPV+NPV) %>%
-#         filter(combo==max(combo))
-# 
-# 
-# pred_value_plot <- PV_df %>%
-#         filter(incidence==0.1)%>%
-#         select(variables,prediction,incidence,coverage,PPV,NPV) %>%
-#         pivot_longer(c(PPV,NPV),
-#                      names_to = "Predictive Value",
-#                      values_to = "Percent"
-#                      ) %>%
-#         ggplot(aes(x=coverage*100,y=Percent*100,col=`Predictive Value`,
-#                    lty=variables
-#                    ))+
-#                 geom_line()+
-#                 facet_grid(.~prediction)+
-#                 theme_cowplot()+
-#                 ylab("Percent")+
-#                 xlab("Coverage (%)")+
-#                 scale_linetype_discrete("Model")+
-#                 theme(legend.position = "bottom")
-# 
-# plot_grid(
-#         confusion_plot,pred_value_plot,ncol=1,
-#         labels = c("A","B")
-#         
-# )
-
-```
 
 ### Methods
 
@@ -1592,6 +1014,7 @@ read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample 
 
         
 ```
+
 
 ## Supplement
 
@@ -1964,7 +1387,7 @@ fs3<- misclassify_df %>% filter(variables=="All Variables")%>%
         facet_grid(.~end_window)+
         theme_cowplot()+
         scale_x_continuous("Days since first dose",breaks=seq(0,365,90))+
-        scale_y_continuous("Proportion Seropositive")+
+        scale_y_continuous("Proportion Seroincident")+
         scale_color_manual(values = c("#003262","#FDB515"))+
         scale_shape_manual(values=c(1,1))+
         geom_hline(yintercept = 0.05,lty=2)+
@@ -2099,9 +1522,9 @@ p2_outside_df <- loocv_spec_df %>%
 p2<- bind_rows(p2_outside_df,p2_vax_df)%>%
         mutate(Model=factor(variables,
                             levels=c("original","all_2class","all_3class"),
-                            labels=c("Case-only model",
-                                     "Mixed-cohort model",
-                                     "Mixed-cohort 3-class model"
+                             labels=c("Infection-Only model",
+                                     "Mixed-Cohort\nTwo Class model",
+                                     "Mixed-Cohort\nThree Class model"
                                      )
                             )) %>%
         mutate(population=factor(population))%>%
@@ -2189,6 +1612,567 @@ plot_grid(
 
 
 ##OLD STUFF
+
+```{r loocv-code, eval=FALSE}
+
+source("loocv.R")
+
+```
+
+
+```{r avg-sens}
+
+loocv_tvfit_list <- read_rds(
+          paste0("data/generated_data/analysis_objects/loocv/","loocv_tvfit_list.rds")
+)
+
+tvsens_draws <- bind_rows(
+        loocv_tvfit_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$out_df %>%
+                mutate(model="Original Model"),
+        loocv_tvfit_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$out_df %>%
+                mutate(model="Alternative Model 1"),
+        loocv_tvfit_list$`All Variables`$all_fitdata$`200-day`$Case$out_df %>%
+                mutate(model="Alernative Model 2")
+        )%>%
+        filter(time<=200)
+
+tvsens_draws %>%
+        group_by(.draw,model) %>%
+        summarize(avg_sens=mean(theta)) %>%
+        group_by(model)%>%
+        summarize(median=round(100*median(avg_sens)),
+                  lb=round(100*quantile(avg_sens,0.025)),
+                  ub=round(100*quantile(avg_sens,0.975))
+                  )
+
+
+```
+
+
+```{r loocv-figure, eval=TRUE,fig.width=6,fig.height=10}
+
+#variable list
+#variable list
+var_list <- list(
+        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA"),
+        `All Variables`= data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist()  %>% unname(),
+        `Reduced IgG Panel (and age)` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA", "age"),
+        `All Variables (and age)`= data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist() %>% c("age") %>% unname()
+)
+
+tree_param <- 1000
+
+#get permutation importance
+importance<- ranger::ranger(data=final_wide %>%
+                filter(cohort %in% c("SMIC/PIC","BGD Vaccinee","HTI Vaccinee"))%>%
+                                    addInfectionWindow(end_window=200),
+                            formula=make_formula("inf_200",var_list[["All Variables"]]),
+                            num.trees= tree_param,
+                            case.weights = NULL,
+                            importance = "permutation"
+)
+
+importance$variable.importance %>% sort()
+
+#get permutation importance
+importance<- ranger::ranger(data=final_wide %>%
+                filter(cohort %in% c("SMIC/PIC","BGD Vaccinee","HTI Vaccinee"))%>%
+                                    addInfectionWindow(end_window=200),
+                            formula=make_formula("inf_200",var_list[["Reduced IgG Panel"]]),
+                            num.trees= tree_param,
+                            case.weights = NULL,
+                            importance = "permutation"
+)
+importance$variable.importance%>% sort()
+
+
+
+f3_loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df.rds") %>%
+        ### limit to the correct data and variables 
+        filter(base_data_name %in% c("smicpic_fitdata","all_fitdata"))%>%
+        filter(variables %in% c("Reduced IgG Panel","All Variables"))%>%
+        #remove the all variables model for just smic/pic data
+        filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
+        mutate(new_modelname=case_when(
+                base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
+                base_data_name == "all_fitdata" &variables == "Reduced IgG Panel" ~ "Alternative Model 1",
+                base_data_name == "all_fitdata" &variables == "All Variables"~ "Alternative Model 2"
+        )) %>%
+        mutate(new_modelname=factor(new_modelname,levels=c(
+                                                           "Alternative Model 1",
+                                                           "Alternative Model 2",
+                                                           "Original Model"
+                                                           ))) 
+
+
+f3_tvfit_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_df.rds") %>%
+        ### limit to the correct data and variables 
+        filter(base_data_name %in% c("smicpic_fitdata","all_fitdata"))%>%
+        filter(variables %in% c("Reduced IgG Panel","All Variables"))%>%
+        #remove the all variables model for just smic/pic data
+        filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
+        mutate(new_modelname=case_when(
+                base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
+                base_data_name == "all_fitdata" &variables == "Reduced IgG Panel" ~ "Alternative Model 1",
+                base_data_name == "all_fitdata" &variables == "All Variables"~ "Alternative Model 2"
+        )) %>%
+        mutate(new_modelname=factor(new_modelname,levels=c(
+                                                           "Alternative Model 1",
+                                                           "Alternative Model 2",
+                                                           "Original Model"
+                                                           ))) 
+
+f3_spec_df <- read_rds( paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_df.rds"))%>%
+        ### limit to the correct data and variables 
+        filter(base_data_name %in% c("smicpic_fitdata","all_fitdata"))%>%
+        filter(variables %in% c("Reduced IgG Panel","All Variables"))%>%
+        #remove the all variables model for just smic/pic data
+        filter(!(base_data_name=="smicpic_fitdata" & variables== "All Variables")) %>%
+        mutate(new_modelname=case_when(
+                base_data_name == "smicpic_fitdata" &variables == "Reduced IgG Panel" ~ "Original Model",
+                base_data_name == "all_fitdata" &variables == "Reduced IgG Panel" ~ "Alternative Model 1",
+                base_data_name == "all_fitdata" &variables == "All Variables"~ "Alternative Model 2"
+        )) %>%
+        mutate(new_modelname=factor(new_modelname,levels=c(
+                                                           "Alternative Model 1",
+                                                           "Alternative Model 2",
+                                                           "Original Model"
+                                                           ))) %>%
+        mutate(population=ifelse(
+                population =="Vaccinee",
+                "Vaccinated", "Unvaccinated"
+
+        )) 
+
+f3_spec_df %>%
+        mutate(
+               median=round(100*median), 
+               lb=round(100*lb),
+               ub=round(100*ub)) %>%
+        select(new_modelname,population,median,lb,ub)
+
+# f3a <- f3_loocv_df %>%
+#         filter(cohort=="SMIC/PIC") %>%
+#         ggplot(alpha=0.7)+ 
+#         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=new_modelname),labels=FALSE,n.cuts=0)+ 
+#         geom_abline(lty=3,col="grey50")+
+#         xlab("False Positivity Rate")+
+#         ylab("True Positivity Rate")+
+#         scale_color_brewer("Model",palette ="Dark2")+
+#         theme_cowplot()
+# 
+# f3b <- f3_loocv_df %>%
+#         filter(base_data_name=="all_fitdata")%>%
+#         ggplot()+ 
+#         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)),
+#                               col=new_modelname),labels=FALSE,n.cuts=0
+#                           )+ 
+#         geom_abline(lty=3,col="grey50")+
+#         xlab("False Positivity Rate")+
+#         ylab("True Positivity Rate")+
+#         scale_color_brewer("Model",palette ="Dark2")+
+#         theme_cowplot()
+
+f3a <- f3_loocv_df %>%
+        ggplot()+ 
+        plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)),
+                              col=new_modelname),labels=FALSE,n.cuts=0
+                          )+ 
+        geom_abline(lty=3,col="grey50")+
+        xlab("False Positivity Rate")+
+        ylab("True Positivity Rate")+
+        scale_color_brewer("Model",palette ="Dark2")+
+        theme_cowplot()
+
+
+
+plotROC::calc_auc(f3a)
+
+f3c <- f3_loocv_df %>%
+        filter(inf_200==1)%>%
+        group_by(new_modelname,day) %>%
+        summarize(seropos=mean(spec95_seropos))  %>%      
+        ggplot(aes(col=new_modelname,fill=new_modelname))+
+                geom_point(aes(x=day,y=seropos),shape=1)+
+                geom_line(data=filter(f3_tvfit_df,population== "Case",time<200),aes(x=time,y=median))+
+                geom_ribbon(data=filter(f3_tvfit_df,population== "Case",time<200),
+                            aes(x=time,ymin=lb,ymax=ub),col=NA,
+                                            alpha=0.2
+                                )+
+                facet_grid(.~new_modelname,scales="free_x",space="free")+
+                scale_color_brewer("Model",palette ="Dark2")+
+                scale_fill_brewer("Model",palette ="Dark2")+
+                theme_bw()+
+                theme(  panel.grid.major.x=element_blank(),
+                        panel.grid.minor =element_blank(),
+                        )+
+                ylab("Sensitivity")+
+                xlab("Days after symptom onset")
+
+f3d <- f3_spec_df %>%
+        ggplot()+
+                geom_point(aes(x=population,y=median,col=new_modelname))+
+                geom_linerange(aes(x=population,ymin=lb,ymax=ub,col=new_modelname))+
+                scale_color_brewer("Model",palette ="Dark2")+
+                theme_bw()+
+                theme(  panel.grid.major.x=element_blank(),
+                        panel.grid.minor =element_blank(),
+                        axis.text.x = element_text(angle=45,hjust = 1)
+                        )+
+                geom_hline(yintercept = 0.95,lty=2)+
+        facet_grid(.~new_modelname,scales="free_x")+
+        scale_y_continuous("Specificity",limits=c(0.85,1))+
+        xlab("Population")
+        
+
+f3_spec_df
+
+# plot_grid(f3a+ggtitle("Cases and uninfected\ncontacts only")+
+#                   theme(legend.position = c(0.25,0.4),
+#                         legend.background = element_rect(fill = "white",color = "black"))
+#                   ,
+#           f3b+ggtitle("All samples")+
+#                   theme(legend.position ="none"),nrow=1,align="h",
+#                   labels = c("A","B")) %>%
+#         plot_grid(f3c+theme(legend.position ="none"),
+#                   f3d+theme(legend.position ="none"),ncol=1,
+#                   labels = c("","C","D")
+#                   )
+
+
+plot_grid(
+        plot_grid(f3a+#ggtitle("Cases and uninfected\ncontacts only")+
+                  theme(legend.position = c(0.25,0.4),
+                        legend.background = element_rect(fill = "white",color = "black")),
+                  ggplot()+
+                          theme_void(),
+                  rel_widths = c(2,1)
+                  ),
+        f3c+theme(legend.position ="none"),
+        f3d+theme(legend.position ="none"),ncol=1,
+                  labels = c("A","B","C"),
+                  rel_heights = c(3,2,2.5)
+                  )
+
+
+
+# loocv_df %>%
+#         filter(status=="Case")%>%
+#                 filter(base_data_name!="bgd_fitdata")%>%
+#         group_by(variables,day,base_data_name,status,inf_200)%>%
+#         summarize(seropos=mean(spec95_seropos)) %>%
+#         ggplot(aes(x=factor(day),fill=inf_200,y=seropos))+
+#         geom_col(position=position_dodge2())+
+#         facet_grid(paste(variables,base_data_name)~.,scales="free_x",space="free")+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme_cowplot()+
+#         xlab("Day")+
+#         ylab("Seropositivity")+
+#         scale_fill_brewer("Model",palette="Dark2")+
+#         theme(axis.text.x = element_text(hjust=1,angle=45),
+#               legend.position = "none")
+# 
+# 
+# 
+# loocv_df %>%
+#         filter(status=="Vaccinee")%>%
+#         filter(base_data_name=="all_fitdata")%>%
+#         group_by(variables,day,base_data_name,status)%>%
+#         summarize(seropos=mean(spec95_seropos)) %>%
+#         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
+#         geom_col(position=position_dodge2())+
+#         facet_grid(status~paste(variables,base_data_name),scales="free_x",space="free")+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme_cowplot()+
+#         xlab("Day")+
+#         ylab("Seropositivity")+
+#         scale_fill_brewer("Model",palette="Dark2")+
+#         cowplot::theme_cowplot()+
+#         theme(axis.text.x = element_text(hjust=1,angle=45),
+#               legend.position = "none")
+# 
+# filter(loocv_tvfit_df,population== "Vaccinee") %>%
+#         filter(base_data_name!="bgd_fitdata")%>%
+#         ggplot()+
+#                 geom_line(aes(x=time,y=median,col=paste(base_data_name,variables)))+
+#                 geom_ribbon( aes(x=time,y=median,ymin=lb,ymax=ub,fill=paste(base_data_name,variables)),col=NA,
+#                                             alpha=0.2
+#                                 )+
+#                 cowplot::theme_cowplot()+
+#                 geom_hline(yintercept = 0.05,lty=2)+
+#                 scale_y_continuous(limits=c(0,1))+
+#         xlab("Day")+
+#         ylab("Seropositivity")
+        
+                #geom_vline(xintercept = 200)
+
+# f3a <- loocv_df %>%
+#         ggplot()+ 
+#         plotROC::geom_roc(aes(m = prediction, d = as.numeric(as.character(inf_200)), col=variables),labels=FALSE,n.cuts=0)+ 
+#         geom_abline(lty=3,col="grey50")+
+#         xlab("False Positivity Rate")+
+#         ylab("True Positivity Rate")+
+#         scale_color_brewer("Model",palette ="Dark2")+
+#         theme_cowplot()+
+#         theme(legend.position = "none")
+# 
+# plotROC::calc_auc(f3a)
+# 
+# 
+# f3b <- loocv_df %>%
+#         group_by(variables,day,status)%>%
+#         summarize(seropos=mean(spec95_seropos)) %>%
+#         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
+#         geom_col(position=position_dodge2())+
+#         facet_grid(.~status,scales="free_x",space="free")+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme_cowplot()+
+#         xlab("Day")+
+#         ylab("Seropositivity")+
+#         scale_fill_brewer("Model",palette="Dark2")+
+#         theme(axis.text.x = element_text(hjust=1,angle=45),
+#               legend.position = "none")
+# 
+# 
+# external_df <- read_rds("data/generated_data/external_df.rds")
+# 
+# 
+# f3c <- external_df %>%
+#         filter(training_set == "Vax included" | variables=="Reduced IgG Panel") %>%
+#         mutate(variables=ifelse(training_set=="No vax included",
+#                                 "Original",variables
+#                                 )) %>%
+#         group_by(variables,day,cohort)%>%
+#         summarize(seropos=mean(spec95_seropos)) %>%
+#         mutate(variables=factor(variables,
+#                                 levels=c(
+#                                          
+#                                          "All Variables",
+#                                          "Reduced IgG Panel",
+#                                          "Original"
+#                                          ))) %>%
+#         mutate(variables=fct_rev(variables))%>%
+#         ggplot(aes(x=factor(day),fill=variables,y=seropos))+
+#         geom_col(position=position_dodge2())+
+#         geom_hline(yintercept = 0.05,lty=2)+
+#         theme_cowplot()+
+#         xlab("Day")+
+#         ylab("Seropositivity"               )+
+#         scale_fill_brewer("Model",palette="Dark2",direction = -1)+
+#         theme(axis.text.x = element_text(hjust=1,angle=45))
+# 
+# plot_grid(f3a,f3b, f3c, ncol = 1,labels = c("A","B","C"))
+
+```
+
+### Figure 5: Model performance to distinguish recently infected individuals, recently vaccinated individuals, and individuals neither recently infected nor vaccinated. 
+
+Samples of recently infected individuals were collected between 5 and 200 days after symptom onset. Samples of recently vaccinated individuals (from Bangladesh and Haiti) were collected between 5 and 200 days after the first dose was given. Samples of individuals who were neither recently infected nor vaccinated were from Bangladeshi cases, Bangladeshi uninfected contacts, Bangladeshi vaccinees, and Haitian vaccinees. 
+
+
+```{r threeclass-code, eval=FALSE}
+
+source("code/R/loocv_3class.R")
+
+```
+
+```{r threeclass-figure, eval=TRUE,fig.width=5.5,fig.height=9}
+
+
+loocv_3class_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_3class_df.rds")
+
+
+
+
+loocv_3class_df %>% filter(variables=="Reduced IgG Panel") %>%
+        group_by(three_class) %>%
+        summarize(samples=n(),
+                  individuals=length(unique(id))
+                  )
+
+loocv_3class_df %>%
+        filter(variables %in% c("All Variables","Reduced IgG Panel"))%>%
+        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+        mutate(prediction=factor(prediction)) %>%
+        group_by(variables,three_class) %>%
+        mutate(Days=paste0(sort(unique(day)),collapse = ", ")) %>%
+        group_by(variables,three_class,Days,prediction,.drop=FALSE) %>%
+        summarize(n=n(),
+                  ) %>%
+        group_by(variables,three_class,Days)%>%
+        mutate(n=glue::glue("{n}/{sum(n)} ({100*(round(n/sum(n),2))}%)")) %>%
+        spread(prediction,n) %>%
+        rename(`Observed Class`=three_class,
+               Model=variables) %>%
+        flextable::flextable() %>%
+        flextable::autofit()
+
+
+
+loocv_3class_df %>%
+        filter(variables %in% c("All Variables","Reduced IgG Panel"))%>%
+        mutate(three_class=factor(three_class),
+               prediction=factor(prediction)
+               ) %>%
+        count(variables,three_class,prediction,.drop=FALSE) %>%
+                group_by(variables,three_class) %>%
+                mutate(proportion=n/sum(n)) %>%
+        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+        mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
+        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+        ggplot(aes(x=three_class,y=prediction))+
+                geom_tile(aes(fill=100*proportion))+
+                facet_wrap(.~variables)+
+                geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
+        scale_fill_distiller("Percent\nClassified",palette = "Oranges",
+                             direction = 1
+                             )+
+        xlab("True Class")+
+        ylab("Predicted Class")+
+        theme_cowplot()
+        # theme(axis.text.x = element_text(angle=45,hjust=1))
+
+# confusion_matrix_df <- read_rds("data/generated_data/loocv_3class_df.rds") %>%
+#         count(variables,three_class,prediction) %>%
+#                 group_by(variables,three_class) %>%
+#                 mutate(proportion=n/sum(n)) %>%
+#         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+#         mutate(prediction=str_replace(prediction,"Recently","Recently "))
+# 
+# 
+# confusion_plot <- confusion_matrix_df %>%
+#         ggplot(aes(x=three_class,y=prediction))+
+#                 geom_tile(aes(fill=100*proportion))+
+#                 facet_wrap(.~variables)+
+#                 geom_text(aes(label=scales::percent(round(proportion,2),1)))+
+#         scale_fill_distiller("Percent\nClassified",palette = "Oranges",direction = 1)+
+#         xlab("Observed Class")+
+#         ylab("Predicted Class")+
+#         theme_cowplot()
+# 
+# 
+# incidence_lvls <- c(0.05,0.10,0.15)
+# coverage_lvls <- seq(0,1,0.02)
+# 
+# 
+# # sens3_df <- confusion_matrix_df %>%
+# #         mutate(three_class=str_replace(three_class,"\n"," ")) %>%
+# #         select(variables,three_class,prediction,proportion)  %>%
+# #         filter(three_class==prediction) %>%
+# #         select(variables,three_class,sensitivity=proportion)
+# 
+# #get class level sensitivity and specificity
+# class_pred_df <- data.frame()
+# for( class in c("Recently Infected", "Recently Vaccinated","Neither")){
+#         
+#         class_pred_df <- bind_rows(
+#                 class_pred_df,
+#                 confusion_matrix_df %>%
+#         mutate(three_class=str_replace(three_class,"\n"," ")) %>%
+#         select(variables,three_class,prediction,proportion)  %>%
+#         spread(prediction,proportion) %>%
+#         mutate(percent= ifelse(three_class==class,
+#                                !!sym(class),
+#                                1 - !!sym(class))) %>%
+#         mutate(prediction=class) %>%
+#         mutate(parameter=ifelse(three_class==class,
+#                                 "sensitivity","class_specificity"
+#                                 ))%>%
+#         select(variables,three_class, prediction,percent,parameter)
+#                 
+#         )        
+#         
+# }
+# 
+# #get sensitivity df
+# sens_df <- class_pred_df %>% filter(parameter=="sensitivity") %>%
+#         spread(parameter,percent) %>%
+#         select(-three_class)
+# #get specificity df
+# spec_df <- class_pred_df %>% filter(parameter=="class_specificity") %>%
+#         select(variables,three_class,prediction,percent) %>%
+#         spread(three_class,percent) %>%                       
+#         expand_grid(incidence=incidence_lvls,coverage=coverage_lvls) %>%
+#         mutate(vax_notinf=coverage*(1-incidence),
+#                notboth=1-incidence-vax_notinf
+#                ) %>% 
+#         mutate(specificity=case_when(
+#                 prediction=="Neither" ~ (`Recently Infected`*incidence + `Recently Vaccinated`*vax_notinf)/(incidence+vax_notinf),
+#                 prediction=="Recently Infected" ~ (Neither*notboth + `Recently Vaccinated`*vax_notinf)/(notboth+vax_notinf),
+#                 prediction=="Recently Vaccinated" ~ (Neither*notboth + `Recently Infected`*incidence)/(notboth+incidence)
+#         )) %>%        
+#         select(-Neither,-`Recently Infected`,-`Recently Vaccinated`)
+# 
+# 
+# spec_df %>%filter(coverage==0.5) %>%
+#         # filter(variables=="All Variables") %>%
+#         filter(incidence==0.1)
+# 
+# 
+# #calculate PPV and NPV
+# PV_df <- left_join(sens_df,spec_df)  %>%
+#         mutate(
+#                 PPV= case_when(
+#                         prediction=="Neither"~ notboth*sensitivity/(notboth*sensitivity + (1-notboth)*(1-specificity)) ,
+#                         prediction=="Recently Infected"~ incidence*sensitivity/(incidence*sensitivity + (1-incidence)*(1-specificity)),
+#                         prediction=="Recently Vaccinated"~vax_notinf*sensitivity/(vax_notinf*sensitivity + (1-vax_notinf)*(1-specificity))
+#                        ),
+#                 NPV= case_when(
+#                         prediction=="Neither"~ (1-notboth)*specificity/(notboth*(1-sensitivity) + (1-notboth)*(specificity)) ,
+#                         prediction=="Recently Infected"~ (1-incidence)*specificity/(incidence*(1-sensitivity) + (1-incidence)*(specificity)),
+#                         prediction=="Recently Vaccinated"~ (1-vax_notinf)*specificity/(vax_notinf*(1-sensitivity) + (1-vax_notinf)*(specificity))
+#                        )
+# 
+#         )
+# 
+# 
+# PV_df %>% filter(variables=="All Variables") %>%
+#         filter(incidence==0.1) %>%
+#         filter(prediction=="Recently Infected") %>%
+#         summarize(min(PPV),
+#                   max(PPV),
+#                   min(NPV),
+#                   max(NPV)
+#                   )
+# 
+# PV_df %>% filter(variables=="All Variables") %>%
+#         filter(incidence==0.1) %>%
+#         filter(prediction=="Recently Vaccinated") %>%
+#         mutate(combo=PPV+NPV) %>%
+#         filter(combo==max(combo))
+# 
+# 
+# pred_value_plot <- PV_df %>%
+#         filter(incidence==0.1)%>%
+#         select(variables,prediction,incidence,coverage,PPV,NPV) %>%
+#         pivot_longer(c(PPV,NPV),
+#                      names_to = "Predictive Value",
+#                      values_to = "Percent"
+#                      ) %>%
+#         ggplot(aes(x=coverage*100,y=Percent*100,col=`Predictive Value`,
+#                    lty=variables
+#                    ))+
+#                 geom_line()+
+#                 facet_grid(.~prediction)+
+#                 theme_cowplot()+
+#                 ylab("Percent")+
+#                 xlab("Coverage (%)")+
+#                 scale_linetype_discrete("Model")+
+#                 theme(legend.position = "bottom")
+# 
+# plot_grid(
+#         confusion_plot,pred_value_plot,ncol=1,
+#         labels = c("A","B")
+#         
+# )
+
+```
+
 
 ## ROC comparison
 
