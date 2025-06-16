@@ -91,6 +91,11 @@ final_wide %>%
         summarize(samples=n(),
                   individuals=length(unique(id)))
 
+
+final_wide %>%
+        filter(status=="Contact") %>%
+        distinct(id,age, sex)
+
 ```
 
 
@@ -394,7 +399,7 @@ ggsave(plot=f2,filename="figures/main_text/figure2.png", height = 2.39,width = 6
 
 
 __Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days).__
-```{r eval=FALSE}
+```{r loocv-code, eval=FALSE}
 source("code/R/loocv_new.R")
 ```
 
@@ -818,36 +823,11 @@ lambda_df <- read_rds("data/generated_data/analysis_objects/simulation/lambda_df
 sims_original <- read_rds("data/generated_data/analysis_objects/simulation/sims_original_10.rds")
 
 
-f4 <- lambda_df%>%
-        # mutate(campaign_day=ifelse(adjustment=="Alternative",21,campaign_day))%>%
-        # mutate(new_strategy=paste(adjustment,campaign_day)) %>%
-        # mutate(campaign_day=glue::glue("{campaign_day} days post campaign start"))%>%
+f4_df <- lambda_df %>%
         mutate(campaign_day=ifelse(campaign_day==21,
                                    "Early serosurvey (21 days post campaign start)",
                                    "Late serosurvey (120 days post campaign start)"
                                    ))%>%
-        mutate(new_coverage=factor(coverage,
-                                   labels=c("0%",
-                                            "25%",
-                                            "50%",
-                                            "75%"
-                                            )
-                                   )) %>%
-        mutate(new_adjustment=case_when(
-                adjustment=="Alternative" ~3,
-                adjustment=="Ignore" ~ 1,
-                adjustment=="Questionnaire" ~ 2
-        )) %>%
-        mutate(new_adjustment=factor(new_adjustment,
-                                     # labels=c("No adjustment\nfor vaccination",
-                                     #          "Adjust estimates after\nknowing vaccination status",
-                                     #          "Predict with\nMixed-Cohort Model"
-                                     #          )
-                                     labels=c("Crude adjustment with\nthe Infection-Only Model",
-                                              "Stratified adjustment with\nthe Infection-Only Model",
-                                              "Coverage adjustment with\nthe Mixed-Cohort Two Class Model"
-                                              )
-                                     ))%>%
         # group_by(new_strategy,coverage)%>%
         # mutate(avg_lambda=mean(lambda)) %>%
         # ungroup()%>%
@@ -875,6 +855,33 @@ f4
 
 ggsave(plot=f4,filename="figures/main_text/figure4.pdf", height = 2.89,width = 6.09,scale = 1.7)
 ggsave(plot=f4,filename="figures/main_text/figure4.png", height = 2.89,width = 6.09,scale = 1.7)
+
+
+```
+
+```{r, simulation-bias}
+
+f4_df %>% nrow()
+
+table(f4_df$adjustment)
+
+f4_df$campaign_day
+
+#model=adjustment
+#campaign_day (will need to change this)
+coverage
+
+
+lambda_df %>%
+        mutate(model=ifelse(adjustment=="Alternative",
+                            "Alternative","Original"
+                            )) %>%
+        left_join(simulation_df, by = c("coverage", "campaign_day", "simulation", "model")) %>%
+        mutate(bias=(lambda-truth)/truth*100) %>%
+        group_by(adjustment,coverage,campaign_day) %>%
+        summarise(avg=round(mean(bias)),min=round(min(bias)),max=round(max(bias))) %>% View()
+        
+
 
 
 # #get the truth form the simulations in the right format
@@ -1024,7 +1031,7 @@ read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample 
 
 ```{r eval=FALSE}
 
-final_wide %>%
+ts1 <- final_wide %>%
         group_by(cohort,status) %>%
         mutate(Individuals=length(unique(id)))%>% 
         count(cohort,status,Individuals,day) %>%
@@ -1058,8 +1065,10 @@ final_wide %>%
         flextable::autofit() 
 
 
+ts1
 
-# %>% flextable::save_as_docx( path = "figures/supp_table.docx")
+
+ts1 %>% flextable::save_as_docx( path = "figures/tables/supp_table_1.docx")
 
 
 
@@ -1180,6 +1189,19 @@ peak_sero_data <- final_df %>%
         # filter(!id %in% c("IMS_A018","IMS_B021"))%>%
         select(id,status,cohort,antigen_pretty,isotype,peak=RAU_value,day)
 
+
+sero180_data <- final_df %>% 
+        filter(status %in% c("Vaccinee","Case")) %>%
+        filter(day %in% 180) %>%
+        # filter(!id %in% c("IMS_A018","IMS_B021"))%>%
+        select(id,status,cohort,antigen_pretty,isotype,day180=RAU_value,day)
+
+
+# final_df %>% 
+#         filter(status %in% c("Vaccinee","Case")) %>%
+#         filter(day %in% c(42,44,30)) %>%
+#         count(cohort,day) 
+
 # peak_sero_data %>%
 #         filter(antigen_pretty=="Ogawa OSP") %>%
 #         group_by(cohort,isotype) %>%
@@ -1194,23 +1216,42 @@ peak_sero_data <- final_df %>%
 #         arrange(isotype)
 
 
-baseline_sero_data %>%
+ts2_pv <- baseline_sero_data %>%
         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
                                      "O139 OSP", "TcpA"
                                      ))%>%
         left_join(peak_sero_data) %>%
         mutate(diff=peak-baseline) %>% 
         filter(!is.na(diff))%>%
-        mutate(cohort=ifelse(cohort=="SMIC/PIC","BGD Case",cohort))%>%
+        group_by(antigen_pretty,isotype) %>%
+        summarise(`p-value`=t.test(diff[status=="Case"],diff[status=="Vaccinee"])$p.value) %>%
+        mutate(`p-value`=ifelse(`p-value`<0.01,"<0.01",as.character(round(`p-value`,2))))
+
+ts2 <- baseline_sero_data %>%
+        filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
+                                     "O139 OSP", "TcpA"
+                                     ))%>%
+        left_join(peak_sero_data) %>%
+        mutate(diff=peak-baseline) %>% 
+        filter(!is.na(diff))%>%
         group_by(antigen_pretty,isotype,status) %>%
         summarize(gmt=round(10^mean(diff),1)) %>% 
-        ungroup() %>% spread(status,gmt)%>%
+        ungroup() %>% 
+        left_join(ts2_pv)%>%
+        spread(status,gmt)%>%
         rename(Antigen=antigen_pretty,
                Isotype=isotype
                )%>%
         arrange(Antigen,Isotype)%>%
+        select(Antigen,Isotype,Case,Vaccinee,`p-value`)%>%
         flextable::flextable() %>%
         flextable::autofit()
+
+
+ts2 
+
+
+ts2 %>% flextable::save_as_docx( path = "figures/tables/supp_table_2.docx")
 
 
 ```
@@ -1220,24 +1261,74 @@ baseline_sero_data %>%
 
 ```{r}
 
-
-baseline_sero_data %>%
+ts3_pv <- baseline_sero_data %>%
         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
                                      "O139 OSP", "TcpA"
                                      ))%>%
         left_join(peak_sero_data) %>%
         mutate(diff=peak-baseline) %>% 
         filter(!is.na(diff))%>%
-        mutate(cohort=ifelse(cohort=="SMIC/PIC","BGD Case",cohort))%>%
+        group_by(antigen_pretty,isotype) %>%
+        mutate(over2=10^(diff)>=2) %>%
+        summarize(`p-value`=fisher.test(over2,status)$p.value)%>%
+        mutate(`p-value`=ifelse(`p-value`<0.01,"<0.01",as.character(round(`p-value`,2))))
+
+
+ts3 <- baseline_sero_data %>%
+        filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
+                                     "O139 OSP", "TcpA"
+                                     ))%>%
+        left_join(peak_sero_data) %>%
+        mutate(diff=peak-baseline) %>% 
+        filter(!is.na(diff))%>%
         group_by(antigen_pretty,isotype,status) %>%
         summarize(pct=paste0(100*round(mean(10^(diff)>=2),2),"%")) %>% 
-        ungroup() %>% spread(status,pct)%>%
+        ungroup() %>% 
+        left_join(ts3_pv)%>%
+        spread(status,pct)%>%
         rename(Antigen=antigen_pretty,
                Isotype=isotype
                )%>%
         arrange(Antigen,Isotype)%>%
+        select(Antigen,Isotype,Case,Vaccinee,`p-value`)%>%
         flextable::flextable() %>%
         flextable::autofit()
+
+ts3%>% flextable::save_as_docx( path = "figures/tables/supp_table_3.docx")
+
+```
+
+
+```{r}
+
+#Something to investigate the 180 days
+
+# baseline_sero_data %>%
+#         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
+#                                      "O139 OSP", "TcpA"
+#                                      ))%>%
+#         left_join(sero180_data)%>%
+#         mutate(diff=day180-baseline) %>% 
+#         filter(!is.na(diff)) %>%
+#         group_by(antigen_pretty,isotype,status) %>%
+#         summarize(gmt=round(10^mean(diff),1),
+#                   `p-value`=round(t.test(diff)$p.value,2)
+#                   ) %>%
+#         mutate(`p-value`=ifelse(`p-value`<0.01,"<0.01",as.character(round(`p-value`,2))))%>%
+#         mutate(new=paste0(gmt," (",`p-value`,")")) %>%
+#         select(antigen_pretty,isotype,status,new)%>%
+#         spread(status,new)%>%
+#         rename(Antigen=antigen_pretty,
+#                Isotype=isotype
+#                )%>%
+#         arrange(Antigen,Isotype)%>%
+#         select(Antigen,Isotype,Case,Vaccinee)
+#         
+
+
+
+
+
 ```
 
 
