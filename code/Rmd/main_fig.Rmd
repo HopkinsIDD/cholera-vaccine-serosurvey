@@ -1312,6 +1312,8 @@ ts3 <- baseline_sero_data %>%
         flextable::flextable() %>%
         flextable::autofit()
 
+ts3
+
 ts3%>% flextable::save_as_docx( path = "figures/tables/supp_table_3.docx")
 
 ```
