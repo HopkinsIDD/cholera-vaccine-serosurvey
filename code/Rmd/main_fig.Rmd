@@ -1019,6 +1019,24 @@ read_excel("data/raw_data/cohort_data/RIK Sero2 Electronic Lab Registry_ Sample 
                   mean(n>=3)
                   )
 
+
+
+
+final_wide %>%
+        group_by(cohort) %>%
+        summarise(sum(!is.na(RAU_IgG_O139BSA)),
+                  sum(is.na(RAU_IgA_O139BSA)|is.na(RAU_IgM_O139BSA)),
+                  sum(is.na(RAU_IgA_O139BSA)|is.na(RAU_IgM_O139BSA))/236
+
+                      )
+
+
+
+
+
+
+
+
         
 ```
 
@@ -1299,31 +1317,36 @@ ts3%>% flextable::save_as_docx( path = "figures/tables/supp_table_3.docx")
 ```
 
 
+## Table S4. Geometric mean ratio of measurements taken at the 180 day visit relative to baseline measurements for Bangladeshi cases and Haitian vaccinees
+
+P-value in parentheses corresponds to the t-test of of the logarithm (base 10) of the ratio relative to the null value (i.e. zero).
+
+
 ```{r}
 
-#Something to investigate the 180 days
 
-# baseline_sero_data %>%
-#         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
-#                                      "O139 OSP", "TcpA"
-#                                      ))%>%
-#         left_join(sero180_data)%>%
-#         mutate(diff=day180-baseline) %>% 
-#         filter(!is.na(diff)) %>%
-#         group_by(antigen_pretty,isotype,status) %>%
-#         summarize(gmt=round(10^mean(diff),1),
-#                   `p-value`=round(t.test(diff)$p.value,2)
-#                   ) %>%
-#         mutate(`p-value`=ifelse(`p-value`<0.01,"<0.01",as.character(round(`p-value`,2))))%>%
-#         mutate(new=paste0(gmt," (",`p-value`,")")) %>%
-#         select(antigen_pretty,isotype,status,new)%>%
-#         spread(status,new)%>%
-#         rename(Antigen=antigen_pretty,
-#                Isotype=isotype
-#                )%>%
-#         arrange(Antigen,Isotype)%>%
-#         select(Antigen,Isotype,Case,Vaccinee)
-#         
+baseline_sero_data %>%
+        filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP",
+                                     "O139 OSP", "TcpA"
+                                     ))%>%
+        left_join(sero180_data)%>%
+        mutate(diff=day180-baseline) %>%
+        filter(!is.na(diff)) %>%
+        group_by(antigen_pretty,isotype,status) %>%
+        summarize(gmt=round(10^mean(diff),1),
+                  `p-value`=round(t.test(diff)$p.value,2)
+                  ) %>%
+        mutate(`p-value`=ifelse(`p-value`<0.01,"<0.01",as.character(round(`p-value`,2))))%>%
+        mutate(new=paste0(gmt," (",`p-value`,")")) %>%
+        select(antigen_pretty,isotype,status,new)%>%
+        spread(status,new)%>%
+        rename(Antigen=antigen_pretty,
+               Isotype=isotype
+               )%>%
+        arrange(Antigen,Isotype)%>%
+        select(Antigen,Isotype,Case,Vaccinee) %>% 
+        View()
+
 
 
 
