@@ -424,7 +424,7 @@ sims_alternative <- list()
 
 lambda_df <- data.frame()
 
-simulations <- 10
+simulations <- 100
 n_survey <- 1000
 coverage_values <- c(0, 0.25, 0.5, 0.75)
 
