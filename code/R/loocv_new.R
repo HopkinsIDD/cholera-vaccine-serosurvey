@@ -259,74 +259,74 @@ for(v in 1:length(formula_list)){
 
 
 
-loocv_df %>%
-        filter(status=="Vaccinee")%>%
-        count(truth,spec95_seropos,variables,day) %>%
-        spread(spec95_seropos,n) %>%
-        rename(positive=`1`,
-               negative=`0`) %>%
-        mutate(positive=ifelse(is.na(positive),0,positive),
-               negative=ifelse(is.na(negative),0,negative),
-        ) %>%
-        mutate(perpos=positive/(positive+negative)) %>%
-        ggplot(aes(x=factor(day),y=perpos,fill=variables)
-        )+
-        geom_col(position=position_dodge2(width=0.1))
-
-
-loocv_df %>%
-        filter(str_detect(variables,"3class")) %>%
-        mutate(across(Neither:RecentlyVaccinated,.fns = ~ifelse(is.na(.x),
-                                                                0,.x
-                                                                ))) %>%
-        mutate(prediction=case_when(
-                Neither >= RecentlyInfected & Neither >=RecentlyVaccinated ~"Neither",
-                RecentlyInfected > Neither & RecentlyInfected >= RecentlyVaccinated ~"RecentlyInfected",
-                RecentlyVaccinated > Neither & RecentlyVaccinated > RecentlyInfected ~"RecentlyVaccinated"
-        )) %>%
-        mutate(three_class=factor(three_class),
-                  prediction=factor(prediction)
-        ) %>%
-        count(variables,three_class,prediction,.drop=FALSE) %>%
-        group_by(variables,three_class) %>%
-        mutate(proportion=n/sum(n)) %>%
-        mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
-        mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
-        mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
-        ggplot(aes(x=three_class,y=prediction))+
-        geom_tile(aes(fill=100*proportion))+
-        facet_wrap(.~variables)+
-        geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
-        scale_fill_distiller("Percent\nClassified",palette = "Oranges",
-                             direction = 1
-        )+
-        xlab("True Class")+
-        ylab("Predicted Class")+
-        theme_cowplot()
-
-
-        
-loocv_df %>%
-        filter(str_detect(variables,"3class")) %>%
-        mutate(across(Neither:RecentlyVaccinated,.fns = ~ifelse(is.na(.x),
-                                                                0,.x
-        ))) %>%
-        mutate(prediction=case_when(
-                Neither >= RecentlyInfected & Neither >=RecentlyVaccinated ~"Neither",
-                RecentlyInfected > Neither & RecentlyInfected >= RecentlyVaccinated ~"RecentlyInfected",
-                RecentlyVaccinated > Neither & RecentlyVaccinated > RecentlyInfected ~"RecentlyVaccinated"
-        )) %>%
-        filter(three_class %in% c("RecentlyVaccinated","RecentlyInfected")) %>%
-        group_by(day,variables,three_class)%>%
-        summarize(n=n(),
-                  vax_pred=mean(prediction=="RecentlyVaccinated"),
-                  inf_pred=mean(prediction=="RecentlyInfected"),
-                  neither_pred=mean(prediction=="Neither")
-                  ) %>%
-        gather(pred_class,proportion,-c(day,variables,three_class,n))%>%
-        ggplot(aes(x=factor(day),y=proportion))+
-        geom_col(aes(fill=pred_class))+
-        facet_wrap(variables~three_class,scales = "free")
+# loocv_df %>%
+#         filter(status=="Vaccinee")%>%
+#         count(truth,spec95_seropos,variables,day) %>%
+#         spread(spec95_seropos,n) %>%
+#         rename(positive=`1`,
+#                negative=`0`) %>%
+#         mutate(positive=ifelse(is.na(positive),0,positive),
+#                negative=ifelse(is.na(negative),0,negative),
+#         ) %>%
+#         mutate(perpos=positive/(positive+negative)) %>%
+#         ggplot(aes(x=factor(day),y=perpos,fill=variables)
+#         )+
+#         geom_col(position=position_dodge2(width=0.1))
+# 
+# 
+# loocv_df %>%
+#         filter(str_detect(variables,"3class")) %>%
+#         mutate(across(Neither:RecentlyVaccinated,.fns = ~ifelse(is.na(.x),
+#                                                                 0,.x
+#                                                                 ))) %>%
+#         mutate(prediction=case_when(
+#                 Neither >= RecentlyInfected & Neither >=RecentlyVaccinated ~"Neither",
+#                 RecentlyInfected > Neither & RecentlyInfected >= RecentlyVaccinated ~"RecentlyInfected",
+#                 RecentlyVaccinated > Neither & RecentlyVaccinated > RecentlyInfected ~"RecentlyVaccinated"
+#         )) %>%
+#         mutate(three_class=factor(three_class),
+#                   prediction=factor(prediction)
+#         ) %>%
+#         count(variables,three_class,prediction,.drop=FALSE) %>%
+#         group_by(variables,three_class) %>%
+#         mutate(proportion=n/sum(n)) %>%
+#         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
+#         mutate(three_class=glue::glue("{three_class}\n(n={sum(n)})"))%>%
+#         mutate(prediction=str_replace(prediction,"Recently","Recently "))%>%
+#         ggplot(aes(x=three_class,y=prediction))+
+#         geom_tile(aes(fill=100*proportion))+
+#         facet_wrap(.~variables)+
+#         geom_text(aes(label=paste0(100*round(proportion,2),"%")))+
+#         scale_fill_distiller("Percent\nClassified",palette = "Oranges",
+#                              direction = 1
+#         )+
+#         xlab("True Class")+
+#         ylab("Predicted Class")+
+#         theme_cowplot()
+# 
+# 
+#         
+# loocv_df %>%
+#         filter(str_detect(variables,"3class")) %>%
+#         mutate(across(Neither:RecentlyVaccinated,.fns = ~ifelse(is.na(.x),
+#                                                                 0,.x
+#         ))) %>%
+#         mutate(prediction=case_when(
+#                 Neither >= RecentlyInfected & Neither >=RecentlyVaccinated ~"Neither",
+#                 RecentlyInfected > Neither & RecentlyInfected >= RecentlyVaccinated ~"RecentlyInfected",
+#                 RecentlyVaccinated > Neither & RecentlyVaccinated > RecentlyInfected ~"RecentlyVaccinated"
+#         )) %>%
+#         filter(three_class %in% c("RecentlyVaccinated","RecentlyInfected")) %>%
+#         group_by(day,variables,three_class)%>%
+#         summarize(n=n(),
+#                   vax_pred=mean(prediction=="RecentlyVaccinated"),
+#                   inf_pred=mean(prediction=="RecentlyInfected"),
+#                   neither_pred=mean(prediction=="Neither")
+#                   ) %>%
+#         gather(pred_class,proportion,-c(day,variables,three_class,n))%>%
+#         ggplot(aes(x=factor(day),y=proportion))+
+#         geom_col(aes(fill=pred_class))+
+#         facet_wrap(variables~three_class,scales = "free")
 
 
 # loocv_df %>%
