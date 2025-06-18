@@ -878,8 +878,8 @@ f4 <- f4_df %>%
 
 f4
 
-ggsave(plot=f4,filename="figures/main_text/figure4.pdf", height = 2.89,width = 6.09,scale = 1.7)
-ggsave(plot=f4,filename="figures/main_text/figure4.png", height = 2.89,width = 6.09,scale = 1.7)
+ggsave(plot=f4,filename="figures/main_text/figure4.eps", height = 2.89,width = 6.09,scale = 1.7)
+ggsave(plot=f4,filename="figures/main_text/figure4.tiff", height = 2.89,width = 6.09,scale = 1.7)
 
 
 ```
