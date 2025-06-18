@@ -857,10 +857,6 @@ f4_df <- lambda_df %>%
                 adjustment=="Questionnaire" ~ 2
         )) %>%
         mutate(new_adjustment=factor(new_adjustment,
-                                     # labels=c("No adjustment\nfor vaccination",
-                                     #          "Adjust estimates after\nknowing vaccination status",
-                                     #          "Predict with\nMixed-Cohort Model"
-                                     #          )
                                      labels=c("Crude adjustment with\nthe Infection-Only Model",
                                               "Stratified adjustment with\nthe Infection-Only Model",
                                               "Coverage adjustment with\nthe Mixed-Cohort Two Class Model"
@@ -870,25 +866,12 @@ f4_df <- lambda_df %>%
 
         
 f4 <- f4_df %>%
-        # group_by(new_strategy,coverage)%>%
-        # mutate(avg_lambda=mean(lambda)) %>%
-        # ungroup()%>%
-        # select(simulation,new_strategy,new_coverage,lambda,avg_lambda) %>%
-        # left_join(sims_viz,by = c("simulation", "new_strategy", "new_coverage")) %>%
-        # gather(type,value,-c(simulation,new_strategy, new_coverage, coverage))%>%
         ggplot()+
         geom_hline(yintercept=10,lty=2)+
         geom_boxplot(aes(y=lambda*100,x=new_coverage,col=new_adjustment),fill=NA)+
-        # geom_violin(aes(y=value,col=type,alpha=type),position="identity",fill="grey",
-        #             trim=FALSE,scale="area")+
         scale_color_brewer("Adjustment Method",palette = "Dark2")+
-        # scale_alpha_manual(values=c(0,0.3))+
-        # geom_point(aes(y=avg_lambda),col="blue")+
         facet_wrap((campaign_day)~.)+
         cowplot::theme_cowplot()+
-        # theme(axis.text.x = element_text(angle=45,hjust = 1),
-        #       legend.position = "none"
-        #       )+
         ylab("200-day seroincidence\n(Infections per 100 population)")+
         xlab("Vaccination Coverage")+
         theme(legend.position = "bottom")
