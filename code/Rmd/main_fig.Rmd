@@ -23,7 +23,7 @@ knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,
 ```
 
 
-```{r}
+```{r eval = FALSE}
 
 #run these first to create the objects used in the figures
 source("code/R/misclassification.R")
@@ -48,20 +48,14 @@ final_df <- read_rds("data/generated_data/analysis_data/final_df.rds")
 final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
 
 
+# write_csv(final_df,"data/generated_data/analysis_data/final_df.csv")
+# write_csv(final_wide,"data/generated_data/analysis_data/final_wide.csv")
+
+
 ```
 
 
 ## Main Text 
-
-### Abstract
-
-```{r abstract}
-
-final_wide %>%
-        filter(studycode!="E01JH") %>%
-        nrow()
-
-```
 
 ### Results
 
@@ -413,11 +407,10 @@ ggsave(plot=f2,filename="figures/main_text/figure2.tiff", height = 2.39,width = 
 
 ```
 
+#### Inclusion of data from vaccinees improved performance of seroincidence models without the need for additional antigen targets
 
 __Figure 3: Random forest classification model performance at distinguishing samples of recently infected cases (<200 days) from samples of recently vaccinees, uninfected contacts, and cases that were not recently infected (200+ days).__
-```{r loocv-code, eval=FALSE}
-source("code/R/loocv_new.R")
-```
+
 
 ```{r newfigure3, eval=FALSE}
 
@@ -615,222 +608,11 @@ ggsave(plot=f3,filename="figures/main_text/figure3.tiff", height = 4.22,width = 
 ```
 
 
+#### Multiple adjustment strategies address bias in seroincidence estimates in partially-vaccinated populations 
+
+
+
 __Figure 4. Simulated serological surveys in settings with varying levels of vaccination coverage using multiple strategies to calculate seroincidence__
-
-The number of days since the first dose of the campaign is shown in parentheses. Blue line violin plots show the distribution of 100 estimates of seroincidence using different strategies (x-axis) at various levels of vaccine coverage (top of each panel). Blue dot indicates the average seroincidence estimate. Each simulated survey had 1000 persons. The true incidence was 10 infections per 100 in 200 days as shown in the grey violin plots. 
-
-
-```{r simulation-results}
-
-# #get sensitivty estimates
-# 
-# #load loocv objects
-# loocv_spec_list <- read_rds(
-#         paste0("data/generated_data/analysis_objects/loocv/","loocv_spec_list.rds")
-# )
-# loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list.rds")
-# 
-# loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df.rds")
-# 
-# 
-# #load stan fit
-# original_sens_fitdata <-loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$data
-# original_sens_spread <- loocv_sens_list$`Reduced IgG Panel`$smicpic_fitdata$`200-day`$Case$fit %>% 
-#         spread_draws(`(Intercept)`,
-#                      b[term,group],
-#                      day1,day2,day3
-#         )
-# 
-# #for loop through potential days since infection
-# original_sens_obj <- data.frame()
-# original_sens_beta_draws <-data.frame()
-# 
-# 
-# for(t in 1:200){
-#         
-#         cat(t,"\n")
-#         time <- log(t) -mean(log(original_sens_fitdata$new_day))
-#         
-#         #get individual sensitivities for simulation
-#         tmp_df <- original_sens_spread %>%
-#                 mutate(logit_theta_j=`(Intercept)` + b+
-#                                day1*time +
-#                                day2*time^2+
-#                                day3*time^3
-#                        
-#                 ) %>%
-#                 mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-#                 group_by(group) %>%
-#                 summarize(theta=mean(theta_j),n()) %>% #average across individuals here
-#                 mutate(days_ago=t)%>%
-#                 rename(pos_ID=group,
-#                        ind_sens=theta
-#                 )
-#         
-#         original_sens_obj <- bind_rows(original_sens_obj,tmp_df)
-#         
-#         #get sensitivity distribution for seroincidence estimation
-#         tmp_dist <- original_sens_spread %>%
-#                 mutate(logit_theta_j=`(Intercept)` + b+
-#                                day1*time +
-#                                day2*time^2+
-#                                day3*time^3
-#                        
-#                 ) %>%
-#                 mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-#                 group_by(.draw) %>%
-#                 summarize(theta=mean(theta_j),n()) %>%
-#                 mutate(days_ago=t)
-#         
-#         original_sens_beta_draws <-bind_rows(
-#                 original_sens_beta_draws,
-#                 tmp_dist
-#         )
-# }
-# 
-# 
-# #fit beta distribution
-# original_sens_beta_draws %>% group_by(.draw)%>%
-#         summarize(sens=mean(theta)) %>%
-#         median_qi()
-# 
-# 
-# 
-# #Alternative model 1
-# #load stan fit
-# alt1_sens_fitdata <-loocv_sens_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$data
-# alt1_sens_spread <- loocv_sens_list$`Reduced IgG Panel`$all_fitdata$`200-day`$Case$fit %>% 
-#         spread_draws(`(Intercept)`,
-#                      b[term,group],
-#                      day1,day2,day3
-#         )
-# 
-# #for loop through potential days since infection
-# alt1_sens_obj <- data.frame()
-# alt1_sens_beta_draws <-data.frame()
-# 
-# 
-# for(t in 1:200){
-#         
-#         cat(t,"\n")
-#         time <- log(t) -mean(log(alt1_sens_fitdata$new_day))
-#         
-#         #get individual sensitivities for simulation
-#         tmp_df <- alt1_sens_spread %>%
-#                 mutate(logit_theta_j=`(Intercept)` + b+
-#                                day1*time +
-#                                day2*time^2+
-#                                day3*time^3
-#                        
-#                 ) %>%
-#                 mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-#                 group_by(group) %>%
-#                 summarize(theta=mean(theta_j),n()) %>% #average across individuals here
-#                 mutate(days_ago=t)%>%
-#                 rename(pos_ID=group,
-#                        ind_sens=theta
-#                 )
-#         
-#         alt1_sens_obj <- bind_rows(alt1_sens_obj,tmp_df)
-#         
-#         #get sensitivity distribution for seroincidence estimation
-#         tmp_dist <- alt1_sens_spread %>%
-#                 mutate(logit_theta_j=`(Intercept)` + b+
-#                                day1*time +
-#                                day2*time^2+
-#                                day3*time^3
-#                        
-#                 ) %>%
-#                 mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-#                 group_by(.draw) %>%
-#                 summarize(theta=mean(theta_j),n()) %>%
-#                 mutate(days_ago=t)
-#         
-#         alt1_sens_beta_draws <-bind_rows(
-#                 alt1_sens_beta_draws,
-#                 tmp_dist
-#         )
-# }
-# 
-# 
-# #fit beta distribution
-# alt1_sens_beta_draws %>% group_by(.draw)%>%
-#         summarize(sens=mean(theta)) %>%
-#         median_qi()
-# 
-# 
-# 
-# #Alternative model 2
-# #load stan fit
-# alt2_sens_fitdata <-loocv_sens_list$`All Variables`$all_fitdata$`200-day`$Case$data
-# alt2_sens_spread <- loocv_sens_list$`All Variables`$all_fitdata$`200-day`$Case$fit %>% 
-#         spread_draws(`(Intercept)`,
-#                      b[term,group],
-#                      day1,day2,day3
-#         )
-# 
-# #for loop through potential days since infection
-# alt2_sens_obj <- data.frame()
-# alt2_sens_beta_draws <-data.frame()
-# 
-# 
-# for(t in 1:200){
-#         
-#         cat(t,"\n")
-#         time <- log(t) -mean(log(alt2_sens_fitdata$new_day))
-#         
-#         #get individual sensitivities for simulation
-#         tmp_df <- alt2_sens_spread %>%
-#                 mutate(logit_theta_j=`(Intercept)` + b+
-#                                day1*time +
-#                                day2*time^2+
-#                                day3*time^3
-#                        
-#                 ) %>%
-#                 mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-#                 group_by(group) %>%
-#                 summarize(theta=mean(theta_j),n()) %>% #average across individuals here
-#                 mutate(days_ago=t)%>%
-#                 rename(pos_ID=group,
-#                        ind_sens=theta
-#                 )
-#         
-#         alt2_sens_obj <- bind_rows(alt2_sens_obj,tmp_df)
-#         
-#         #get sensitivity distribution for seroincidence estimation
-#         tmp_dist <- alt2_sens_spread %>%
-#                 mutate(logit_theta_j=`(Intercept)` + b+
-#                                day1*time +
-#                                day2*time^2+
-#                                day3*time^3
-#                        
-#                 ) %>%
-#                 mutate(theta_j = 1/(1+exp(-logit_theta_j)))%>%
-#                 group_by(.draw) %>%
-#                 summarize(theta=mean(theta_j),n()) %>%
-#                 mutate(days_ago=t)
-#         
-#         alt2_sens_beta_draws <-bind_rows(
-#                 alt2_sens_beta_draws,
-#                 tmp_dist
-#         )
-# }
-# 
-# 
-# #fit beta distribution
-# alt2_sens_beta_draws %>% group_by(.draw)%>%
-#         summarize(sens=mean(theta)) %>%
-#         median_qi()
-
-
-```
-
-
-```{r simulation-code, eval=FALSE}
-
-source("code/R/simulation.R")
-
-```
 
 
 ```{r simulation-figure, eval=TRUE}
@@ -899,8 +681,6 @@ lambda_df %>%
         
 
 ```
-
-
 
 
 ### Methods
