@@ -267,6 +267,9 @@ f1
 
 ggsave(plot=f1,filename="figures/main_text/figure1.eps", height = 4.36,width = 6.5,scale = 1.5)
 ggsave(plot=f1,filename="figures/main_text/figure1.tiff", height = 4.36,width = 6.5,scale = 1.5)
+ggsave(plot=f1,filename="figures/main_text/figure1.png", height = 4.36,width = 6.5,scale = 1.5)
+
+
 ```
 
 
@@ -276,13 +279,6 @@ ggsave(plot=f1,filename="figures/main_text/figure1.tiff", height = 4.36,width = 
 #### Previous seroincidence models frequently misclassify vaccination as recent infection
 
 __Figure 2:  Misclassification of vaccinees as seropositive by previous seroincidence models using 45, 120, 200, and 300 day infection windows__
-
-```{r misclassification-code, eval=FALSE}
-
-# Misclassification.R provides predictions for misclassification of vaccinees
-source("code/R/misclassification.R")
-
-```
 
 ```{r misclassify-figure, eval=TRUE,fig.width=9.1,fig.height=7}
 
@@ -403,7 +399,7 @@ f2
 
 ggsave(plot=f2,filename="figures/main_text/figure2.eps", height = 2.39,width = 6.5,scale = 1.5)
 ggsave(plot=f2,filename="figures/main_text/figure2.tiff", height = 2.39,width = 6.5,scale = 1.5)
-
+ggsave(plot=f2,filename="figures/main_text/figure2.png", height = 2.39,width = 6.5,scale = 1.5)
 
 ```
 
@@ -510,6 +506,19 @@ p2_outside_df <- loocv_spec_df %>%
                         select(median,lb=lb_new,ub,variables,population)%>%
                         mutate(population="Unvaccinated")
 
+
+
+bind_rows(p2_outside_df,p2_vax_df)%>%
+        mutate(Model=factor(variables,
+                            levels=c("original","reduced_2class","reduced_3class"),
+                            labels=c("Infection-Only model",
+                                     "Mixed-Cohort\nTwo Class model",
+                                     "Mixed-Cohort\nThree Class model"
+                                     )
+                            ))
+
+
+
 p2<- bind_rows(p2_outside_df,p2_vax_df)%>%
         mutate(Model=factor(variables,
                             levels=c("original","reduced_2class","reduced_3class"),
@@ -541,6 +550,14 @@ p3_df <- loocv_tvfit_df %>%
                                                 )) %>%
         filter(time<=200)
 
+p3_df %>% group_by(variables,base_data_name) %>%
+        summarize(mean(median),
+                  time[median==max(median)]
+                  )
+
+
+
+
 
 
 
@@ -561,7 +578,9 @@ p3 <- p3_df%>%
         theme_cowplot()+
         theme(legend.position = "none")
 
-p4 <- loocv_df %>%
+
+
+p4_df <- loocv_df %>%
         filter(variables=="reduced_3class") %>%
         mutate(across(Neither:RecentlyVaccinated,.fns = ~ifelse(is.na(.x),
                                                                 0,.x
@@ -574,7 +593,18 @@ p4 <- loocv_df %>%
         mutate(three_class=factor(three_class),
                   prediction=factor(prediction)
         ) %>%
-        count(variables,three_class,prediction,.drop=FALSE) %>%
+        count(variables,three_class,prediction,.drop=FALSE)
+
+
+
+p4_df %>%
+        group_by(three_class)%>%
+        mutate(total=sum(n)) %>%
+        mutate(proporiton=n/sum(n))
+        
+        
+        
+p4 <- p4_df%>%
         group_by(variables,three_class) %>%
         mutate(proportion=n/sum(n)) %>%
         mutate(three_class=str_replace(three_class,"Recently","Recently\n"))%>%
@@ -591,6 +621,7 @@ p4 <- loocv_df %>%
         theme_cowplot()
 
 
+
 f3 <- plot_grid(
         plot_grid(p1,p2,nrow=1,rel_widths = c(1,1.2), labels=c("A","B")),
         plot_grid(p3,p4,nrow = 1,rel_widths = c(1,1.2), labels=c("C","D")),
@@ -601,6 +632,7 @@ f3
 
 ggsave(plot=f3,filename="figures/main_text/figure3.eps", height = 4.22,width = 6.5,scale = 1.5)
 ggsave(plot=f3,filename="figures/main_text/figure3.tiff", height = 4.22,width = 6.5,scale = 1.5)
+ggsave(plot=f3,filename="figures/main_text/figure3.png", height = 4.22,width = 6.5,scale = 1.5)
 
 
 
@@ -662,6 +694,7 @@ f4
 
 ggsave(plot=f4,filename="figures/main_text/figure4.eps", height = 2.89,width = 6.09,scale = 1.7)
 ggsave(plot=f4,filename="figures/main_text/figure4.tiff", height = 2.89,width = 6.09,scale = 1.7)
+ggsave(plot=f4,filename="figures/main_text/figure4.png", height = 2.89,width = 6.09,scale = 1.7)
 
 
 ```
@@ -678,6 +711,14 @@ lambda_df %>%
         group_by(adjustment,coverage,campaign_day) %>%
         summarise(avg=round(mean(bias)),min=round(min(bias)),max=round(max(bias))) %>%
         filter(adjustment=="Ignore")
+
+
+lambda_df %>%
+        filter(coverage==0.5)%>%
+        filter(campaign_day==21)%>%
+        group_by(adjustment,coverage,campaign_day)%>%
+        summarize(mean(lambda),min(lambda),max(lambda))
+
         
 
 ```
@@ -803,7 +844,7 @@ ts1 %>% flextable::save_as_docx( path = "figures/tables/supp_table_1.docx")
 #                       )
 
 
-final_df %>%
+fs1 <- final_df %>%
         filter((status=="Vaccinee" & day==0)|status=="Case" & day==2) %>%
         filter(antigen_pretty %in% c("CT-B","Ogawa OSP","Inaba OSP","O139 OSP","TcpA")) %>%
         mutate(`Age Group`=ifelse(age<10,"<10 years old",">= 10 years old")) %>%
@@ -830,6 +871,17 @@ final_df %>%
                 theme(legend.position="none",
                       axis.text.x = element_text(angle=45,hjust=1)
                       )
+
+
+fs1
+
+
+ggsave(plot=fs1,filename="figures/supplement/supp_figure1.png", height = 3.86,width = 6.5,scale = 1.2)
+
+ggsave(plot=fs1,filename="figures/supplement/supp_figure1.eps", height = 3.86,width = 6.5,scale = 1.2)
+
+ggsave(plot=fs1,filename="figures/supplement/supp_figure1.tiff", height = 3.86,width = 6.5,scale = 1.2)
+
 
 # bootDF <- read_rds("data/generated_data/analysis_objects/describe/bootDF.rds")
 
@@ -1076,7 +1128,7 @@ centroids <- mds_obj %>%
                                   D2=mean(D2)
                                   )
 
-mds_obj  %>%
+fs2 <- mds_obj  %>%
         mutate(cohort=case_when(
                         cohort=="BGD Vaccinee" ~ "Bangladeshi Vaccinees",
                         cohort=="HTI Vaccinee" ~ "Haitian Vaccinees",
@@ -1085,6 +1137,7 @@ mds_obj  %>%
         ))%>%
                 ggplot(aes(x=D1,y=D2,col=cohort)) +
                 geom_point(aes(shape=cohort))+
+                geom_point(data=centroids,col="black",shape=c(17,16,17,16,17,16))+
                 scale_color_manual("Cohort", values=c("red","#003262","#FDB515"))+
                 scale_shape_manual("Cohort",values=c(2,1,1))+
                 xlab("Dimension 1")+
@@ -1092,6 +1145,12 @@ mds_obj  %>%
         facet_wrap(.~time_window,scales="free")+
         theme_cowplot()+
         theme(legend.position = "bottom")
+
+
+ggsave(plot=fs2,filename="figures/supplement/supp_figure2.png", height = 2.4,width = 6.5,scale = 2)
+ggsave(plot=fs2,filename="figures/supplement/supp_figure2.tiff", height = 2.4,width = 6.5,scale = 2)
+ggsave(plot=fs2,filename="figures/supplement/supp_figure2.eps", height = 2.4,width = 6.5,scale = 2)
+
 
 ```
 
@@ -1202,7 +1261,7 @@ nmfp_label_df <- data.frame(
                                  levels=c("45","120","200","300"),
                                  labels=c("45-day","120-day","200-day","300-day")))
   
-fs3 + geom_text(data=nmfp_label_df,
+fs3<- fs3 + geom_text(data=nmfp_label_df,
                 label="Nominal false\npositivity rate",
                 aes(x=X,y=Y),fontface="bold"
                 )+
@@ -1212,6 +1271,12 @@ fs3 + geom_text(data=nmfp_label_df,
     arrow = arrow(length = unit(0.2,"cm"),
                   type="closed"
                   ))
+
+
+
+ggsave(plot=fs3,filename="figures/supplement/supp_figure3.png", height = 4.22,width = 6.5,scale = 1.5)
+ggsave(plot=fs3,filename="figures/supplement/supp_figure3.tiff", height = 4.22,width = 6.5,scale = 1.5)
+ggsave(plot=fs3,filename="figures/supplement/supp_figure3.eps", height = 4.22,width = 6.5,scale = 1.5)
 
 
 
@@ -1400,11 +1465,18 @@ p4 <- loocv_df %>%
         theme_cowplot()
 
 
-plot_grid(
+fs4 <- plot_grid(
         plot_grid(p1,p2,nrow=1,rel_widths = c(1,1), labels=c("A","B")),
         plot_grid(p3,p4,nrow = 1,rel_widths = c(1,1), labels=c("C","D")),
         nrow=2
         )
+
+ggsave(plot=fs4,filename="figures/supplement/supp_figure4.png", height = 2.89,width = 6.09,scale =2)
+ggsave(plot=fs4,filename="figures/supplement/supp_figure4.tiff", height = 2.89,width = 6.09,scale = 2)
+ggsave(plot=fs4,filename="figures/supplement/supp_figure4.eps", height = 2.89,width = 6.09,scale = 2)
+
+
+
 ```
 
 
