@@ -265,7 +265,7 @@ f1 <- fig1_df %>%
   
 f1
 
-ggsave(plot=f1,filename="figures/main_text/figure1.eps", height = 4.36,width = 6.5,scale = 1.5)
+ggsave(plot=f1,filename="figures/main_text/figure1.pdf", height = 4.36,width = 6.5,scale = 1.5)
 ggsave(plot=f1,filename="figures/main_text/figure1.tiff", height = 4.36,width = 6.5,scale = 1.5)
 ggsave(plot=f1,filename="figures/main_text/figure1.png", height = 4.36,width = 6.5,scale = 1.5)
 
@@ -397,7 +397,7 @@ f2<- f2a + geom_text(data=nmfp_label_df,
 
 f2
 
-ggsave(plot=f2,filename="figures/main_text/figure2.eps", height = 2.39,width = 6.5,scale = 1.5)
+ggsave(plot=f2,filename="figures/main_text/figure2.pdf", height = 2.39,width = 6.5,scale = 1.5)
 ggsave(plot=f2,filename="figures/main_text/figure2.tiff", height = 2.39,width = 6.5,scale = 1.5)
 ggsave(plot=f2,filename="figures/main_text/figure2.png", height = 2.39,width = 6.5,scale = 1.5)
 
@@ -630,7 +630,7 @@ f3 <- plot_grid(
 
 f3
 
-ggsave(plot=f3,filename="figures/main_text/figure3.eps", height = 4.22,width = 6.5,scale = 1.5)
+ggsave(plot=f3,filename="figures/main_text/figure3.pdf", height = 4.22,width = 6.5,scale = 1.5)
 ggsave(plot=f3,filename="figures/main_text/figure3.tiff", height = 4.22,width = 6.5,scale = 1.5)
 ggsave(plot=f3,filename="figures/main_text/figure3.png", height = 4.22,width = 6.5,scale = 1.5)
 
@@ -692,7 +692,7 @@ f4 <- f4_df %>%
 
 f4
 
-ggsave(plot=f4,filename="figures/main_text/figure4.eps", height = 2.89,width = 6.09,scale = 1.7)
+ggsave(plot=f4,filename="figures/main_text/figure4.pdf", height = 2.89,width = 6.09,scale = 1.7)
 ggsave(plot=f4,filename="figures/main_text/figure4.tiff", height = 2.89,width = 6.09,scale = 1.7)
 ggsave(plot=f4,filename="figures/main_text/figure4.png", height = 2.89,width = 6.09,scale = 1.7)
 
@@ -877,11 +877,6 @@ fs1
 
 
 ggsave(plot=fs1,filename="figures/supplement/supp_figure1.png", height = 3.86,width = 6.5,scale = 1.2)
-
-ggsave(plot=fs1,filename="figures/supplement/supp_figure1.eps", height = 3.86,width = 6.5,scale = 1.2)
-
-ggsave(plot=fs1,filename="figures/supplement/supp_figure1.tiff", height = 3.86,width = 6.5,scale = 1.2)
-
 
 # bootDF <- read_rds("data/generated_data/analysis_objects/describe/bootDF.rds")
 
@@ -1147,9 +1142,7 @@ fs2 <- mds_obj  %>%
         theme(legend.position = "bottom")
 
 
-ggsave(plot=fs2,filename="figures/supplement/supp_figure2.png", height = 2.4,width = 6.5,scale = 2)
-ggsave(plot=fs2,filename="figures/supplement/supp_figure2.tiff", height = 2.4,width = 6.5,scale = 2)
-ggsave(plot=fs2,filename="figures/supplement/supp_figure2.eps", height = 2.4,width = 6.5,scale = 2)
+ggsave(plot=fs2,filename="figures/supplement/supp_figure2.png", height = 2.4,width = 6.5,scale = 1.5)
 
 
 ```
@@ -1273,11 +1266,9 @@ fs3<- fs3 + geom_text(data=nmfp_label_df,
                   ))
 
 
+fs3
 
-ggsave(plot=fs3,filename="figures/supplement/supp_figure3.png", height = 4.22,width = 6.5,scale = 1.5)
-ggsave(plot=fs3,filename="figures/supplement/supp_figure3.tiff", height = 4.22,width = 6.5,scale = 1.5)
-ggsave(plot=fs3,filename="figures/supplement/supp_figure3.eps", height = 4.22,width = 6.5,scale = 1.5)
-
+ggsave(plot=fs3,filename="figures/supplement/supp_figure3.png", height = 2.5,width = 6.5,scale = 1.5)
 
 
 ```
@@ -1471,9 +1462,10 @@ fs4 <- plot_grid(
         nrow=2
         )
 
-ggsave(plot=fs4,filename="figures/supplement/supp_figure4.png", height = 2.89,width = 6.09,scale =2)
-ggsave(plot=fs4,filename="figures/supplement/supp_figure4.tiff", height = 2.89,width = 6.09,scale = 2)
-ggsave(plot=fs4,filename="figures/supplement/supp_figure4.eps", height = 2.89,width = 6.09,scale = 2)
+
+fs4
+
+ggsave(plot=fs4,filename="figures/supplement/supp_figure4.png", height = 3,width = 6.09,scale =1.8)
 
 
 
