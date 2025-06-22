@@ -47,11 +47,6 @@ source("code/R/utils.R")
 final_df <- read_rds("data/generated_data/analysis_data/final_df.rds")
 final_wide <-read_rds("data/generated_data/analysis_data/final_wide.rds")
 
-
-# write_csv(final_df,"data/generated_data/analysis_data/final_df.csv")
-# write_csv(final_wide,"data/generated_data/analysis_data/final_wide.csv")
-
-
 ```
 
 

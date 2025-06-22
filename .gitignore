@@ -51,8 +51,9 @@ po/*~
 rsconnect/
 
 # large files
-/data
 /figures
+/data_original
+
 
 # mac files
 .DS_Store
