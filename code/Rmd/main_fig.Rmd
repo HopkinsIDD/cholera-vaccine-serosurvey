@@ -1469,7 +1469,134 @@ ggsave(plot=fs4,filename="figures/supplement/supp_figure4.png", height = 3,width
 
 
 
+### new figure
 
+```{r}
+
+library(glue)
+
+loocv_df <- read_rds("data_original/generated_data/analysis_objects/loocv/loocv_df_new.rds")
+
+
+loocv_df %>%
+        filter(status=="Vaccinee") %>%
+        count(variables,base_data_name,truth,spec95_seropos,pretty_status=status)
+
+misclassify_df <- read_rds("data_original/generated_data/analysis_objects/misclassification/misclassify_df.rds")
+
+confusion_mat_df <-   bind_rows(
+                misclassify_df %>%
+                        filter(end_window==200)%>%
+        filter(status=="Vaccinee") %>%
+                mutate(
+                       base_data_name="case_fitdata"
+                       )%>%
+        count(variables,spec95_seropos,pretty_status=status,base_data_name),
+        loocv_df %>%
+        #only showing two class model here
+        filter(str_detect(variables,"2"))%>%
+        mutate(pretty_status=case_when(
+                status== "Vaccinee" ~ "Vaccinee",
+                truth==1 & status!= "Vaccinee" ~ "Case",
+                truth==0 & status!= "Vaccinee" ~ "Outside Window"
+        ))%>% 
+        count(variables,base_data_name,spec95_seropos,pretty_status)
+                
+        )%>%
+        group_by(variables,base_data_name,pretty_status) %>%
+        mutate(total=sum(n)) %>%
+        ungroup()%>%
+        mutate(pretty_status=case_when(
+                pretty_status== "Vaccinee" ~ glue("Vaccinee\n(n={total})"),
+                pretty_status=="Case" ~ glue("Case\n(n={total})"),
+                pretty_status=="Outside Window" ~glue("Outside\nWindow\n(n={total})")
+        )) %>%
+        mutate(percent=round(100*n/total)) %>%
+        mutate(pretty_variables=ifelse(
+                str_detect(variables,"reduced|Reduced"),
+                "Three IgG Markers",
+                "All Markers"
+        )) %>%
+        mutate(pretty_data=ifelse(str_detect(base_data_name,"case_"),
+                                  "Case data only", 
+                                  "Case and Vaccinee data"
+                                  ))
+        
+confusion_mat_df %>%
+        ggplot(aes(x=pretty_status,y=factor(spec95_seropos)))+
+        geom_tile(aes(fill=percent),col="black")+
+        geom_text(aes(label=glue("{n} ({percent}%)")))+
+        scale_fill_distiller(aes(fill=percent),direction=1)+
+        facet_grid(fct_rev(pretty_data)~fct_rev(pretty_variables))+
+        theme_cowplot()+
+        xlab("True status")+
+        ylab("Predicted Status")+
+        theme(legend.position = "none")
+
+
+library(pROC)
+
+bind_rows(
+                misclassify_df %>%
+                        filter(end_window==200)%>%
+        filter(status=="Vaccinee") %>%
+                mutate(
+                       base_data_name="case_fitdata"
+                       )%>%
+        select(variables,prediction,pretty_status=status,base_data_name)%>%
+        mutate(truth=0),
+        loocv_df %>%
+        #only showing two class model here
+        filter(str_detect(variables,"2"))%>%
+        mutate(pretty_status=case_when(
+                status== "Vaccinee" ~ "Vaccinee",
+                truth==1 & status!= "Vaccinee" ~ "Case",
+                truth==0 & status!= "Vaccinee" ~ "Outside Window"
+        ))%>% 
+        select(variables,base_data_name,prediction,pretty_status,truth) %>%
+        mutate(truth=as.numeric(as.character(truth)))
+        )%>%
+        mutate(pretty_variables=ifelse(
+                str_detect(variables,"reduced|Reduced"),
+                "Three IgG Markers",
+                "All Markers"
+        )) %>%
+        mutate(pretty_data=ifelse(str_detect(base_data_name,"case_"),
+                                  "Case data only", 
+                                  "Case and Vaccinee data"
+                                  ))%>%
+        group_by(pretty_variables,pretty_data) %>%
+        summarise(auc=as.numeric(auc(roc(truth,prediction))),
+                  lb=as.numeric(ci.auc(roc(truth,prediction)))[1],
+                  ub=as.numeric(ci.auc(roc(truth,prediction)))[3],
+                  ) %>%
+        mutate(pretty_auc=glue::glue("{round(auc,2)} ({round(lb,2)}-{round(ub,2)})"))%>%
+        arrange(desc(pretty_variables),
+                desc(pretty_data)
+                ) %>%
+        select(Markers=pretty_variables,
+               `Training Data`= pretty_data,
+               `Cross-Validated AUC (95% CI)`=pretty_auc
+               )%>%
+        flextable::flextable() %>%
+        flextable::autofit()
+        
+
+# confusion_mat_df %>%
+#         mutate(pretty_status=factor(pretty_status,labels=c("Case",
+#                                                            "Outside\nWindow",
+#                                                            "Vaccinee"
+#                                                            )))%>%
+#         filter(str_detect(variables,"all"))%>%
+#         ggplot(aes(x=pretty_status,y=factor(spec95_seropos)))+
+#         geom_tile(fill=NA,col="black")+
+#         geom_text(aes(label=n))+
+#         facet_grid(fct_rev(base_data_name)~(variables))+
+#         theme_cowplot()
+
+
+
+```
 
 
 
