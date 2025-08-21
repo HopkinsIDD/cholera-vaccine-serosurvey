@@ -1518,16 +1518,18 @@ confusion_mat_df <-   bind_rows(
                 "All Markers"
         )) %>%
         mutate(pretty_data=ifelse(str_detect(base_data_name,"case_"),
-                                  "Case data only", 
-                                  "Case and Vaccinee data"
+                                  "Infection-Only\nModel", 
+                                  "Mixed-Cohort\nTwo Class Model"
                                   ))
         
 confusion_mat_df %>%
-        ggplot(aes(x=pretty_status,y=factor(spec95_seropos)))+
+        ggplot(aes(x=pretty_status,y=factor(spec95_seropos,
+                                            labels=c("Not seroincident","Seroincident")
+                                            )))+
         geom_tile(aes(fill=percent),col="black")+
         geom_text(aes(label=glue("{n} ({percent}%)")))+
         scale_fill_distiller(aes(fill=percent),direction=1)+
-        facet_grid(fct_rev(pretty_data)~fct_rev(pretty_variables))+
+        facet_grid((pretty_data)~fct_rev(pretty_variables))+
         theme_cowplot()+
         xlab("True status")+
         ylab("Predicted Status")+
