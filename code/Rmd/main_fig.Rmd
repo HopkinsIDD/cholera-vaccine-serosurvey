@@ -26,10 +26,10 @@ knitr::opts_chunk$set(echo = FALSE,message = FALSE,warning = FALSE,
 ```{r eval = FALSE}
 
 #run these first to create the objects used in the figures
-source("code/R/misclassification.R")
-source("code/R/loocv_new.R") #this ones takes awhile
-source("code/R/simulation.R") #this one takes awhile
-source("code/R/multidimensional-scaling.R")
+# source("code/R/misclassification.R")
+# source("code/R/loocv_new.R") #this ones takes awhile
+# source("code/R/simulation.R") #this one takes awhile
+# source("code/R/multidimensional-scaling.R")
 
 
 
@@ -1013,7 +1013,7 @@ ts3_pv <- baseline_sero_data %>%
         mutate(diff=peak-baseline) %>% 
         filter(!is.na(diff))%>%
         group_by(antigen_pretty,isotype) %>%
-        mutate(over2=10^(diff)>=2) %>%
+        mutate(over2=10^(diff)>=4) %>%
         summarize(`p-value`=fisher.test(over2,status)$p.value)%>%
         mutate(`p-value`=ifelse(`p-value`<0.01,"<0.01",as.character(round(`p-value`,2))))
 
@@ -1026,7 +1026,7 @@ ts3 <- baseline_sero_data %>%
         mutate(diff=peak-baseline) %>% 
         filter(!is.na(diff))%>%
         group_by(antigen_pretty,isotype,status) %>%
-        summarize(pct=paste0(100*round(mean(10^(diff)>=2),2),"%")) %>% 
+        summarize(pct=paste0(100*round(mean(10^(diff)>=4),2),"%")) %>% 
         ungroup() %>% 
         left_join(ts3_pv)%>%
         spread(status,pct)%>%
@@ -1597,6 +1597,194 @@ bind_rows(
 
 
 ```
+
+```{r}
+rm(list=ls())
+
+source("code/R/packages.R")
+source("code/R/utils.R")
+source("code/R/load-data.R")
+
+
+#variable list
+var_list <- list(
+        `Reduced IgG Panel` = c("RAU_IgG_CtxB","RAU_IgG_InabaOSPBSA","RAU_IgG_OgawaOSPBSA"),
+        `All Variables`= data.frame(marker=colnames(final_wide)) %>%
+                filter(str_detect(marker,"CtxB|Ogawa|Inaba|TcpA|IgG_O139")) %>%
+                unlist()  %>% unname()
+)
+
+formula_list <- list(
+        reduced_2class = make_formula("inf_200",var_list$`Reduced IgG Panel`),
+        all_2class = make_formula("inf_200",var_list$`All Variables`)
+)
+
+
+
+#get data sets for the analysis
+data_list <- list(
+        all_fitdata = final_wide %>%
+                filter(cohort %in% c("SMIC/PIC","BGD Vaccinee","HTI Vaccinee"))%>%
+                mutate(three_class=case_when(
+                        status== "Case" & day_actual <= 200 & day_actual >= 5 ~ "RecentlyInfected",
+                        status== "Vaccinee" & day_actual <= 200 & day_actual >= 5 ~ "RecentlyVaccinated",
+                        TRUE ~ "Neither"
+                )) %>%
+                mutate(three_class=factor(three_class))%>%
+                addInfectionWindow(end_window=200),
+        case_fitdata = final_wide %>%
+                filter(cohort %in% c("SMIC/PIC"))%>%
+                addInfectionWindow(end_window=200)
+)
+
+
+
+#important variables
+tree_param <- 1000
+t <-200
+
+
+cutoff_list <- list()
+
+for(v in 1:length(formula_list)){
+        for (q in names(data_list)){
+
+        #dont do 3 class models when no vaccinees are in the dataset
+         if(q=="case_fitdata" & names(formula_list)[v] %in% c("reduced_3class","all_3class")) next
+                
+        base_data <- data_list[[q]]
+        ids <- unique(base_data$id)
+
+                marks <- formula_list[[v]]
+
+                cat("Data: ",q, "Variables: ",names(formula_list)[v],"\n")
+
+                fit_data <- base_data %>%
+                        addInfectionWindow(end_window=t)
+
+                outcome <- paste0("inf_",t)
+
+                # 1. run 100 models to find a cutoff
+                #keep 50% fit and 50% to test
+                cut_data <- data.frame()
+
+                for(j in 1:100){ #normally 1:100
+
+                        #define who is in and who is out
+                        outside <-fit_data %>%
+                                distinct(cohort,id) %>%
+                                group_by(cohort) %>%
+                                slice_sample(prop=0.5,replace = FALSE) %>%
+                                pull(id)
+                        outside_df <- filter(fit_data,id %in% outside)
+                        inside_df  <- filter(fit_data,!id %in% outside)%>%
+                                addInfectionWindow(end_window=t)
+
+
+                        inside_w = NULL
+
+
+                        #fit rf model
+                        inside_fit <- ranger::ranger(formula=formula_list[[v]],
+                                                     data=inside_df,
+                                                     num.trees = 500,
+                                                     case.weights = inside_w,
+                                                     replace=TRUE
+                        )
+
+                        class_levels <- inside_fit$predictions %>% levels()
+
+                        if(length(class_levels)==2){
+
+                                #find the cutoff for each
+                                performance <-  outside_df %>%
+                                        filter(cohort %in% c("SMIC/PIC")) %>%
+                                        addInfectionWindow(end_window=t) %>%
+                                        getPerf_ranger(inside_fit,paste0("inf_",t))
+                        }
+
+                        if(length(class_levels)==3){
+
+                                tmp_performance_df <- outside_df %>%
+                                        filter(cohort %in% c("SMIC/PIC")) %>%
+                                        addInfectionWindow(end_window=t)
+
+                                tmp_predict <- predict(inside_fit,data=tmp_performance_df,predict.all=TRUE)
+
+                                performance <- getPerf_ranger_new2(tmp_performance_df,
+                                                                   preds= rowMeans(tmp_predict[[1]]==2),#decimal (numeric)
+                                                                   truths= tmp_performance_df$inf_200#1 0 (numeric)
+                                                                   )
+
+                        }
+
+
+
+                        cut <- distinct(performance$data,youden_cutoff,
+                                        spec99_cutoff,
+                                        spec95_cutoff,
+                                        spec90_cutoff
+                        )
+                        cut_data <- bind_rows(cut_data,cut)
+                }
+
+                #find cutoffs
+                median_cut <- cut_data %>%
+                        summarize(n =n(),
+                                  youden_cutoff=median(youden_cutoff),
+                                  spec99_cutoff=median(spec99_cutoff),
+                                  spec95_cutoff=median(spec95_cutoff),
+                                  spec90_cutoff=median(spec90_cutoff)
+                        )
+
+                cutoff_list[[names(formula_list)[v]]][[q]] <- median_cut
+                
+
+}}
+
+cutoff_list
+
+```
+
+```{r}
+
+
+
+
+final_wide %>%
+        # filter(day>=7)%>%
+        mutate(age_group=ifelse(age<=5,
+                                "<=5 yrs",">5 yrs"
+                                ))%>%
+        group_by(age_group,cohort)%>%
+        mutate(n=n(),
+               r=cor(`RAU_IgG_LT-B`,
+                     RAU_IgG_CtxB,method="pearson")) %>%
+        ggplot(aes(x=`RAU_IgG_LT-B`,y=RAU_IgG_CtxB))+
+        geom_point()+
+        geom_label(aes(label=round(r,2),x=-4,y=-2.5))+
+        geom_smooth(method="lm",se=FALSE,col="red")+
+        facet_grid(age_group~cohort)
+
+
+
+# final_wide %>%
+#         filter(day>=7)%>%
+#         filter(age<=5)%>%
+#         lmer(formula=RAU_IgG_CtxB~`RAU_IgG_LT-B`*factor(cohort)+(1|id)
+#            ) %>%
+#         summary()
+# 
+# final_wide %>%
+#         filter(day>=7)%>%
+#         filter(age>5)%>%
+#         lmer(formula=RAU_IgG_CtxB~`RAU_IgG_LT-B`*factor(cohort)+(1|id)) %>%
+#         summary()
+        
+
+
+```
+
 
 
 

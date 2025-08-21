@@ -15,7 +15,7 @@ loocv_spec_list <- read_rds(
 )
 loocv_sens_list <- read_rds("data/generated_data/analysis_objects/loocv/loocv_tvfit_list_new.rds")
 
-loocv_df <- read_rds("data/generated_data/analysis_objects/loocv/loocv_df_new.rds")
+loocv_df <- read_rds("datal/generated_data/analysis_objects/loocv/loocv_df_new.rds")
 
 # 0. Stan model list
 
@@ -640,7 +640,65 @@ for(cov in coverage_values){
 }
 
 
+example_sim <- sim_truth(1,n_survey,coverage = 0.5, incidence = 0.1) 
 
 
+count(example_sim$sim1,R)
+count(example_sim$sim,V)
+
+original_example_21 <- example_sim %>% lapply(make_seropos,model_name = "Original Model",
+                   sens_df= original_sens_obj,
+                   spec_df= original_spec_obj,
+                   vax_df = original_vax_tv_obj,
+                   vax_day=21
+) %>%  bind_rows(.id="simulation") 
+
+count(original_example_21,`Original Model`) 
+filter(original_example_21,`Original Model`==1)%>%
+        count(R,V)
+
+
+original_sens_beta$estimate[1]/ (original_sens_beta$estimate[1]+original_sens_beta$estimate[2])
+1-original_spec_beta$estimate[1]/ (original_spec_beta$estimate[1]+original_spec_beta$estimate[2])
+
+original_vax_beta %>%
+        filter(days_ago==21)%>%
+        summarise(1-shape1/(shape1+shape2))
+
+
+original_example_120 <- example_sim %>% lapply(make_seropos,model_name = "Original Model",
+                                              sens_df= original_sens_obj,
+                                              spec_df= original_spec_obj,
+                                              vax_df = original_vax_tv_obj,
+                                              vax_day=120
+) %>%  bind_rows(.id="simulation") 
+
+count(original_example_120,`Original Model`) 
+
+96-21-32-29
+
+
+alternative_example<- example_sim %>% lapply(make_seropos,model_name = "Alternative Model",
+                   sens_df= alternative_sens_obj,
+                   spec_df= alternative_spec_obj,
+                   vax_df = alternative_vax_tv_obj,
+                   vax_day=21
+) %>%  bind_rows(.id="simulation")
+
+count(alternative_example,`Alternative Model`) 
+
+
+
+alternative_sens_beta$estimate[1]/ (alternative_sens_beta$estimate[1]+alternative_sens_beta$estimate[2])
+
+bind_cols(
+        alternative_vax_beta_draws %>%
+                filter(days_ago==21) %>%
+                select(Vaccinee=theta),
+        alternative_spec_dist %>%
+                select(`Outside Window`=spec)
+) %>%
+        mutate(combined=1-(0.55*Vaccinee+(0.45)*`Outside Window`)) %>%
+        pull(combined) %>% mean()
 
 
